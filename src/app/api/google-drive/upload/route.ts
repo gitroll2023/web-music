@@ -2,6 +2,10 @@ import { google } from 'googleapis';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+// 동적 라우트로 설정
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 const drive = google.drive('v3');
 
 async function getGoogleDriveConfig() {
