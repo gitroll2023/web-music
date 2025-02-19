@@ -169,27 +169,57 @@ export default function AdminPage() {
   const handleFileUpload = async (file: File, type: 'audio' | 'image') => {
     if (!file || !formData.chapter) return null;
 
-    // FormData 생성
-    const form = new FormData();
-    form.append('file', file);
-    form.append('chapterId', formData.chapter);
-    form.append('type', type);
-
     try {
-      const response = await fetch(getApiUrl('/api/upload'), {
+      // Access Token 가져오기
+      const tokenResponse = await fetch(getApiUrl('/api/auth/get-access-token'));
+      if (!tokenResponse.ok) {
+        throw new Error('Failed to get access token');
+      }
+      const { accessToken } = await tokenResponse.json();
+
+      // 파일 메타데이터 설정
+      const metadata = {
+        name: `${formData.chapter}_${type}_${file.name}`,
+        parents: [formData.chapter] // 챕터 ID를 부모 폴더로 사용
+      };
+
+      // 폼 데이터 생성
+      const formData = new FormData();
+      formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+      formData.append('file', file);
+
+      // Google Drive API 직접 호출
+      const uploadResponse = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
         method: 'POST',
-        body: form,
+        headers: {
+          'Authorization': `Bearer ${accessToken}`
+        },
+        body: formData
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to upload file');
+      if (!uploadResponse.ok) {
+        throw new Error('Failed to upload file to Google Drive');
       }
 
-      const data = await response.json();
+      const data = await uploadResponse.json();
+      
+      // 파일 권한 설정 (공개)
+      await fetch(`https://www.googleapis.com/drive/v3/files/${data.id}/permissions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          role: 'reader',
+          type: 'anyone'
+        })
+      });
+
       return {
-        fileId: data.fileId,
-        fileUrl: data.fileUrl,
-        fileName: data.fileName
+        fileId: data.id,
+        fileUrl: `https://drive.google.com/uc?export=view&id=${data.id}`,
+        fileName: data.name
       };
     } catch (error) {
       console.error(`Error uploading ${type} file:`, error);
