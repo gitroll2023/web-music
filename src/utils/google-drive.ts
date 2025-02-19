@@ -3,10 +3,9 @@ export async function uploadFile(fileBuffer: Buffer, fileName: string, mimeType:
   const formData = new FormData();
   formData.append('file', new Blob([fileBuffer], { type: mimeType }), fileName);
 
-  // 환경변수에서 baseUrl을 가져오거나 기본값 사용
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-  
-  const response = await fetch(`${baseUrl}/api/google-drive/upload`, {
+  // config에서 baseUrl 가져오기
+  import { getApiUrl } from './config';
+  const response = await fetch(getApiUrl('/api/google-drive/upload'), {
     method: 'POST',
     body: formData,
   });
@@ -23,9 +22,8 @@ export async function uploadFile(fileBuffer: Buffer, fileName: string, mimeType:
 
 // 파일 삭제 함수
 export async function deleteFile(fileId: string) {
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-  
-  const response = await fetch(`${baseUrl}/api/google-drive/${fileId}`, {
+  import { getApiUrl } from './config';
+  const response = await fetch(getApiUrl(`/api/google-drive/${fileId}`), {
     method: 'DELETE',
   });
 

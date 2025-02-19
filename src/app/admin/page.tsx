@@ -6,6 +6,7 @@ import type { Song, Chapter } from '@prisma/client';
 import { FiEdit2, FiTrash2, FiStar, FiClock, FiList, FiPlusCircle, FiCopy } from 'react-icons/fi';
 import { toast } from 'react-hot-toast';
 import LyricsTimestampEditorV2 from '@/components/LyricsTimestampEditorV2';
+import { getApiUrl } from '@/utils/config';
 
 interface SongWithChapter extends Song {
   chapter: Chapter | null;
@@ -142,7 +143,7 @@ export default function AdminPage() {
   // 곡 목록 불러오기
   const fetchSongs = async () => {
     try {
-      const response = await fetch('/api/songs?limit=100'); // 한 번에 더 많은 곡을 가져오도록 수정
+      const response = await fetch(getApiUrl('/api/songs?limit=100')); // 한 번에 더 많은 곡을 가져오도록 수정
       if (!response.ok) throw new Error('Failed to fetch songs');
       const data = await response.json();
       setSongs(data.songs); // songs 배열은 data.songs에 있음
@@ -155,7 +156,7 @@ export default function AdminPage() {
   // 장르 목록 불러오기
   const fetchGenres = async () => {
     try {
-      const response = await fetch('/api/genres');
+      const response = await fetch(getApiUrl('/api/genres'));
       if (!response.ok) throw new Error('Failed to fetch genres');
       const data = await response.json();
       setGenres(data);
@@ -175,7 +176,7 @@ export default function AdminPage() {
     form.append('type', type);
 
     try {
-      const response = await fetch('/api/upload', {
+      const response = await fetch(getApiUrl('/api/upload'), {
         method: 'POST',
         body: form,
       });
@@ -235,7 +236,7 @@ export default function AdminPage() {
         form.append('imageUrl', imageUploadResult.fileUrl);
       }
 
-      const response = await fetch('/api/songs', {
+      const response = await fetch(getApiUrl('/api/songs'), {
         method: 'POST',
         body: form,
       });
@@ -287,7 +288,7 @@ export default function AdminPage() {
       // 새 파일이 업로드된 경우 기존 파일 삭제
       if (formData.driveFileId && formData.driveFileId !== currentDriveFileId) {
         if (currentDriveFileId) {
-          await fetch(`/api/drive/delete/${currentDriveFileId}`, {
+          await fetch(getApiUrl(`/api/drive/delete/${currentDriveFileId}`), {
             method: 'DELETE'
           });
         }
@@ -295,13 +296,13 @@ export default function AdminPage() {
 
       if (formData.imageId && formData.imageId !== currentImageId) {
         if (currentImageId) {
-          await fetch(`/api/drive/delete/${currentImageId}`, {
+          await fetch(getApiUrl(`/api/drive/delete/${currentImageId}`), {
             method: 'DELETE'
           });
         }
       }
 
-      const response = await fetch(`/api/songs/${selectedSong.id}`, {
+      const response = await fetch(getApiUrl(`/api/songs/${selectedSong.id}`), {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -347,7 +348,7 @@ export default function AdminPage() {
     }
 
     try {
-      const response = await fetch(`/api/songs/${id}`, {
+      const response = await fetch(getApiUrl(`/api/songs/${id}`), {
         method: 'DELETE',
       });
 
@@ -396,12 +397,12 @@ export default function AdminPage() {
     try {
       if (song.popularSong) {
         // 인기곡에서 제거
-        await fetch(`/api/popular-songs?id=${song.popularSong.id}`, {
+        await fetch(getApiUrl(`/api/popular-songs?id=${song.popularSong.id}`), {
           method: 'DELETE',
         });
       } else {
         // 인기곡으로 추가
-        await fetch('/api/popular-songs', {
+        await fetch(getApiUrl('/api/popular-songs'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -541,7 +542,7 @@ export default function AdminPage() {
 
     setIsLoading(true);
     try {
-      const response = await fetch('/api/genres', {
+      const response = await fetch(getApiUrl('/api/genres'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(genreFormData)
@@ -570,7 +571,7 @@ export default function AdminPage() {
 
     setIsLoading(true);
     try {
-      const response = await fetch('/api/genres', {
+      const response = await fetch(getApiUrl('/api/genres'), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(genreFormData)
@@ -600,7 +601,7 @@ export default function AdminPage() {
     if (!confirm('정말 이 장르를 삭제하시겠습니까?')) return;
 
     try {
-      const response = await fetch(`/api/genres?id=${id}`, {
+      const response = await fetch(getApiUrl(`/api/genres?id=${id}`), {
         method: 'DELETE'
       });
 
@@ -637,7 +638,7 @@ export default function AdminPage() {
 
     setIsGenerating(true);
     try {
-      const response = await fetch('/api/generate-lyrics', {
+      const response = await fetch(getApiUrl('/api/generate-lyrics'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -687,7 +688,7 @@ export default function AdminPage() {
   // 인기곡 순서 변경
   const handleReorderPopularSong = async (songId: number, newOrder: number) => {
     try {
-      await fetch('/api/popular-songs/reorder', {
+      await fetch(getApiUrl('/api/popular-songs/reorder'), {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -709,7 +710,7 @@ export default function AdminPage() {
     }
 
     try {
-      const response = await fetch(`/api/songs/${selectedSong.id}/lyrics`, {
+      const response = await fetch(getApiUrl(`/api/songs/${selectedSong.id}/lyrics`), {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -1441,7 +1442,7 @@ export default function AdminPage() {
                           <button
                             onClick={() => {
                               // 신규곡 해제
-                              fetch(`/api/songs/${song.id}/toggle-new`, {
+                              fetch(getApiUrl(`/api/songs/${song.id}/toggle-new`), {
                                 method: 'PATCH',
                               }).then(() => fetchSongs());
                             }}

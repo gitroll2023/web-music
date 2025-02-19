@@ -2,9 +2,11 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import fsPromises from 'fs/promises';
 import path from 'path';
+import os from 'os';
 import { prisma } from '@/lib/prisma';
 
-const AI_MUSIC_DIR = 'C:\\AI_MUSIC';
+// 임시 디렉토리를 사용
+const AI_MUSIC_DIR = path.join(os.tmpdir(), 'AI_MUSIC');
 
 export async function GET(
   request: Request,
@@ -50,38 +52,33 @@ export async function GET(
       }
     }
 
-    // 이미 다운로드된 파일이 있는지 확인
+    // 파일이 없으면 에러
     try {
       await fsPromises.access(filePath);
-      return NextResponse.json({
-        success: true,
-        filename: filename
-      });
     } catch {
-      // 파일이 없으면 다운로드 진행
+      return NextResponse.json({
+        error: '파일이 존재하지 않습니다.'
+      }, { status: 404 });
     }
 
-    // Google Drive 직접 다운로드
-    const driveUrl = `https://docs.google.com/uc?export=download&id=${fileId}`;
-    const response = await fetch(driveUrl, { cache: 'no-store' });
-    
-    if (!response.ok) {
-      throw new Error('파일 다운로드 실패 - 상태 코드: ' + response.status);
-    }
+    // 파일 읽기
+    const fileBuffer = await fsPromises.readFile(filePath);
 
-    const arrayBuffer = await response.arrayBuffer();
-    await fsPromises.writeFile(filePath, Buffer.from(arrayBuffer));
+    // 응답 헤더 설정
+    const headers = new Headers();
+    headers.set('Content-Type', 'audio/mpeg');
+    headers.set('Content-Disposition', `attachment; filename=${encodeURIComponent(filename)}`);
+    headers.set('Content-Length', fileBuffer.length.toString());
 
-    return NextResponse.json({
-      success: true,
-      filename: filename
+    return new NextResponse(fileBuffer, {
+      status: 200,
+      headers: headers,
     });
 
-  } catch (error: unknown) {
-    console.error('다운로드 실패:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : '파일 다운로드에 실패했습니다.' },
-      { status: 500 }
-    );
+  } catch (error) {
+    console.error('Error:', error);
+    return NextResponse.json({
+      error: error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.'
+    }, { status: 500 });
   }
 }

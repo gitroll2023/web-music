@@ -9,6 +9,7 @@ import LoadingScreen from '@/components/LoadingScreen';
 import toast, { Toaster } from 'react-hot-toast';
 import PlaylistView from '@/components/PlaylistView';
 import type { DropResult } from '@hello-pangea/dnd';
+import { getApiUrl } from '@/utils/config';
 
 // 챕터 이름 포맷팅 함수
 const formatChapterName = (name: string) => {
@@ -200,7 +201,7 @@ const MusicPlayerClient: React.FC<MusicPlayerClientProps> = ({
             console.error('No drive file ID available');
             return;
           }
-          const proxyUrl = `/api/proxy/${selectedSong.driveFileId}`;
+          const proxyUrl = getApiUrl(`/api/proxy/${selectedSong.driveFileId}`);
           console.log('Setting new audio source:', proxyUrl);
           audio.src = proxyUrl;
           audio.load();
@@ -281,7 +282,7 @@ const MusicPlayerClient: React.FC<MusicPlayerClientProps> = ({
       }
 
       // 프록시 URL 다시 생성하고 처음부터 재생
-      const proxyUrl = `/api/proxy/${selectedSong.driveFileId}`;
+      const proxyUrl = getApiUrl(`/api/proxy/${selectedSong.driveFileId}`);
       audio.src = proxyUrl;
       audio.load();
       audio.play().catch(handlePlayError);
@@ -318,7 +319,7 @@ const MusicPlayerClient: React.FC<MusicPlayerClientProps> = ({
         }
 
         // 프록시 URL 생성
-        const proxyUrl = `/api/proxy/${selectedSong.driveFileId}`;
+        const proxyUrl = getApiUrl(`/api/proxy/${selectedSong.driveFileId}`);
         audio.src = proxyUrl;
         audio.load();
         
@@ -570,7 +571,7 @@ const MusicPlayerClient: React.FC<MusicPlayerClientProps> = ({
           setIsLoading(true);
         }
         
-        const response = await fetch(`/api/songs?page=${currentPage}&limit=10`);
+        const response = await fetch(getApiUrl(`/api/songs?page=${currentPage}&limit=10`));
         if (!response.ok) throw new Error('Failed to fetch songs');
         const data = await response.json();
         
@@ -640,7 +641,7 @@ const MusicPlayerClient: React.FC<MusicPlayerClientProps> = ({
   // 곡 데이터를 SongWithChapter로 변환하는 헬퍼 함수
   const fetchSongWithRelations = async (song: SongWithChapter): Promise<SongWithChapter> => {
     try {
-      const response = await fetch(`/api/songs/${song.id}/drive-url`);
+      const response = await fetch(getApiUrl(`/api/songs/${song.id}/drive-url`));
       if (!response.ok) {
         throw new Error('Failed to fetch song URL');
       }
