@@ -1,0 +1,32 @@
+1. 로컬에서 파일 수정 후
+
+# 프로젝트 폴더에서
+git add .  # 변경된 파일들 스테이징
+git commit -m "변경사항에 대한 설명"  # 커밋
+git push  # GitHub에 푸시
+
+
+예시:
+
+# 프로젝트 폴더 위치로 이동
+cd C:\Users\USER\Documents\@nodeJS\project_02_music
+
+# 변경사항 확인 (선택사항)
+git status
+
+# 변경된 파일들 스테이징
+git add .
+
+# 커밋 메시지와 함께 커밋
+git commit -m "플레이어 UI 수정"
+
+# GitHub에 푸시
+git push
+
+
+이렇게 하면:
+GitHub 저장소가 자동으로 업데이트되고
+Vercel이 변경을 감지하여 자동으로 새 버전을 배포합니다
+보통 1-2분 내에 웹사이트에 변경사항이 반영됩니다
+배포 상태는 Vercel 대시보드에서 실시간으로 확인할 수 있습니다.
+https://vercel.com/woojins-projects-2c70b539
