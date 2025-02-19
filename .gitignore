@@ -42,3 +42,6 @@ next-env.d.ts
 
 # Google Cloud credentials
 service-account.json
+docs/musicapp-*.json
+*.json.key
+credentials.json
