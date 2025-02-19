@@ -186,10 +186,10 @@ export default function AdminPage() {
       // 폼 데이터 생성
       const form = new FormData();
       form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-      form.append('file', file);
+      form.append('media', file);
 
       // Google Drive API 직접 호출
-      const uploadResponse = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+      const uploadResponse = await fetch('https://www.googleapis.com/drive/v3/files?uploadType=multipart', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${accessToken}`
@@ -198,7 +198,9 @@ export default function AdminPage() {
       });
 
       if (!uploadResponse.ok) {
-        throw new Error('Failed to upload file to Google Drive');
+        const errorData = await uploadResponse.json();
+        console.error('Google Drive API error:', errorData);
+        throw new Error(`Failed to upload file to Google Drive: ${errorData.error?.message || 'Unknown error'}`);
       }
 
       const data = await uploadResponse.json();
