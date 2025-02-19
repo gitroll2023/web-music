@@ -184,29 +184,17 @@ export default function AdminPage() {
       };
 
       // multipart 요청 생성
-      const boundary = '-------314159265358979323846';
-      const delimiter = "\r\n--" + boundary + "\r\n";
-      const close_delim = "\r\n--" + boundary + "--";
-
-      const contentType = file.type || 'application/octet-stream';
-      
-      const multipartRequestBody =
-        delimiter +
-        'Content-Type: application/json\r\n\r\n' +
-        JSON.stringify(metadata) +
-        delimiter +
-        'Content-Type: ' + contentType + '\r\n\r\n' +
-        await file.arrayBuffer() +
-        close_delim;
+      const form = new FormData();
+      form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+      form.append('file', file);
 
       // Google Drive API 직접 호출
-      const uploadResponse = await fetch('https://www.googleapis.com/drive/v3/files?uploadType=multipart', {
+      const uploadResponse = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': `multipart/related; boundary=${boundary}`
+          'Authorization': `Bearer ${accessToken}`
         },
-        body: multipartRequestBody
+        body: form
       });
 
       if (!uploadResponse.ok) {
