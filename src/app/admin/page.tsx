@@ -189,7 +189,7 @@ export default function AdminPage() {
       form.append('file', file);
 
       // Google Drive API 직접 호출
-      const uploadResponse = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+      const uploadResponse = await fetch('https://www.googleapis.com/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${accessToken}`
@@ -220,7 +220,7 @@ export default function AdminPage() {
 
       return {
         fileId: data.id,
-        fileUrl: `https://drive.google.com/uc?export=view&id=${data.id}`,
+        fileUrl: data.webViewLink,
         fileName: data.name
       };
     } catch (error) {
