@@ -47,38 +47,38 @@ export async function POST(request: Request) {
     auth.setCredentials({ refresh_token: refreshToken });
 
     const formData = await request.formData();
-    const file = formData.get('file') as File | null;
-    
+    const file = formData.get('file') as File;
+    const folderId = formData.get('folderId') as string;
+
     if (!file) {
-      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'No file provided' },
+        { status: 400 }
+      );
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const stream = Readable.from(buffer);
 
     const fileMetadata = {
-      name: file.name
+      name: file.name,
+      parents: folderId ? [folderId] : undefined
     };
 
     const media = {
       mimeType: file.type,
-      body: stream
+      body: buffer
     };
 
-    const uploadedFile = await drive.files.create({
+    const response = await drive.files.create({
       requestBody: fileMetadata,
       media: media,
       auth,
-      fields: 'id,name'
-    }).then(res => res.data);
-
-    if (!uploadedFile.id || !uploadedFile.name) {
-      throw new Error('Failed to upload file');
-    }
+      fields: 'id'
+    });
 
     // 파일을 공개로 설정
     await drive.permissions.create({
-      fileId: uploadedFile.id,
+      fileId: response.data.id!,
       requestBody: {
         role: 'reader',
         type: 'anyone'
@@ -87,13 +87,15 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({
-      message: 'File uploaded successfully',
-      fileId: uploadedFile.id,
-      fileName: uploadedFile.name
+      fileId: response.data.id,
+      message: 'File uploaded successfully'
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error uploading file:', error);
-    return NextResponse.json({ error: 'Failed to upload file' }, { status: 500 });
+    return NextResponse.json(
+      { error: error.message || 'Failed to upload file' },
+      { status: 500 }
+    );
   }
 }
