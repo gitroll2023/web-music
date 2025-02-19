@@ -54,7 +54,7 @@ export default function AdminPage() {
   const [selectedSong, setSelectedSong] = useState<SongWithChapter | null>(null);
   const [showLyricsEditorV2, setShowLyricsEditorV2] = useState(false);
   const [activeTab, setActiveTab] = useState<'list' | 'genres' | 'lyrics' | 'popular' | 'new'>('list');
-  const [formData, setFormData] = useState<FormData>({
+  const [formDataState, setFormDataState] = useState<FormData>({
     title: '',
     artist: 'Various Artists',
     chapter: '',
@@ -167,7 +167,7 @@ export default function AdminPage() {
 
   // 파일 업로드 처리
   const handleFileUpload = async (file: File, type: 'audio' | 'image') => {
-    if (!file || !formData.chapter) return null;
+    if (!file || !formDataState.chapter) return null;
 
     try {
       // Access Token 가져오기
@@ -179,14 +179,14 @@ export default function AdminPage() {
 
       // 파일 메타데이터 설정
       const metadata = {
-        name: `${formData.chapter}_${type}_${file.name}`,
-        parents: [formData.chapter] // 챕터 ID를 부모 폴더로 사용
+        name: `${formDataState.chapter}_${type}_${file.name}`,
+        parents: [formDataState.chapter] // 챕터 ID를 부모 폴더로 사용
       };
 
       // 폼 데이터 생성
-      const formData = new FormData();
-      formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-      formData.append('file', file);
+      const form = new FormData();
+      form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+      form.append('file', file);
 
       // Google Drive API 직접 호출
       const uploadResponse = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
@@ -194,7 +194,7 @@ export default function AdminPage() {
         headers: {
           'Authorization': `Bearer ${accessToken}`
         },
-        body: formData
+        body: form
       });
 
       if (!uploadResponse.ok) {
@@ -231,30 +231,30 @@ export default function AdminPage() {
   // 곡 생성
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.title || !formData.chapter) return;
+    if (!formDataState.title || !formDataState.chapter) return;
 
     setIsLoading(true);
     try {
       let audioUploadResult = null;
       let imageUploadResult = null;
 
-      if (formData.audioFile) {
-        audioUploadResult = await handleFileUpload(formData.audioFile, 'audio');
+      if (formDataState.audioFile) {
+        audioUploadResult = await handleFileUpload(formDataState.audioFile, 'audio');
         if (!audioUploadResult) return;
       }
 
-      if (formData.imageFile) {
-        imageUploadResult = await handleFileUpload(formData.imageFile, 'image');
+      if (formDataState.imageFile) {
+        imageUploadResult = await handleFileUpload(formDataState.imageFile, 'image');
         if (!imageUploadResult) return;
       }
 
       const form = new FormData();
-      form.append('title', formData.title);
-      form.append('artist', formData.artist);
-      form.append('chapter', formData.chapter);
-      form.append('genreId', formData.genreId || '');
-      form.append('lyrics', formData.lyrics || '');
-      form.append('isNew', String(formData.isNew));
+      form.append('title', formDataState.title);
+      form.append('artist', formDataState.artist);
+      form.append('chapter', formDataState.chapter);
+      form.append('genreId', formDataState.genreId || '');
+      form.append('lyrics', formDataState.lyrics || '');
+      form.append('isNew', String(formDataState.isNew));
 
       if (audioUploadResult) {
         form.append('driveFileId', audioUploadResult.fileId);
@@ -278,7 +278,7 @@ export default function AdminPage() {
       toast.success('곡이 성공적으로 추가되었습니다.');
       setIsLoading(false);
       setShowModal(false);
-      setFormData({
+      setFormDataState({
         title: '',
         artist: 'Various Artists',
         chapter: '',
@@ -307,7 +307,7 @@ export default function AdminPage() {
   // 곡 수정
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedSong || !formData.title || !formData.chapter) return;
+    if (!selectedSong || !formDataState.title || !formDataState.chapter) return;
 
     setIsLoading(true);
     try {
@@ -316,7 +316,7 @@ export default function AdminPage() {
       const currentImageId = selectedSong.imageId;
 
       // 새 파일이 업로드된 경우 기존 파일 삭제
-      if (formData.driveFileId && formData.driveFileId !== currentDriveFileId) {
+      if (formDataState.driveFileId && formDataState.driveFileId !== currentDriveFileId) {
         if (currentDriveFileId) {
           await fetch(getApiUrl(`/api/drive/delete/${currentDriveFileId}`), {
             method: 'DELETE'
@@ -324,7 +324,7 @@ export default function AdminPage() {
         }
       }
 
-      if (formData.imageId && formData.imageId !== currentImageId) {
+      if (formDataState.imageId && formDataState.imageId !== currentImageId) {
         if (currentImageId) {
           await fetch(getApiUrl(`/api/drive/delete/${currentImageId}`), {
             method: 'DELETE'
@@ -338,17 +338,17 @@ export default function AdminPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          title: formData.title,
-          artist: formData.artist,
-          chapterId: parseInt(formData.chapter),
-          genreId: formData.genreId,
-          lyrics: formData.lyrics,
-          isNew: formData.isNew,
-          driveFileId: formData.driveFileId || currentDriveFileId,
-          fileUrl: formData.fileUrl,
-          duration: formData.duration,
-          imageId: formData.imageId || currentImageId,
-          imageUrl: formData.imageUrl
+          title: formDataState.title,
+          artist: formDataState.artist,
+          chapterId: parseInt(formDataState.chapter),
+          genreId: formDataState.genreId,
+          lyrics: formDataState.lyrics,
+          isNew: formDataState.isNew,
+          driveFileId: formDataState.driveFileId || currentDriveFileId,
+          fileUrl: formDataState.fileUrl,
+          duration: formDataState.duration,
+          imageId: formDataState.imageId || currentImageId,
+          imageUrl: formDataState.imageUrl
         }),
       });
 
@@ -419,7 +419,7 @@ export default function AdminPage() {
       imageId: song.imageId || '',
       imageUrl: song.imageUrl || ''
     };
-    setFormData(newFormData);
+    setFormDataState(newFormData);
   };
 
   // 인기곡 토글
@@ -451,11 +451,11 @@ export default function AdminPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setFormData(prev => ({ ...prev, lyricsFile: file }));
+    setFormDataState(prev => ({ ...prev, lyricsFile: file }));
 
     try {
       const text = await file.text();
-      setFormData(prev => ({ ...prev, lyrics: text }));
+      setFormDataState(prev => ({ ...prev, lyrics: text }));
     } catch (error) {
       console.error('Error reading lyrics file:', error);
     }
@@ -466,7 +466,7 @@ export default function AdminPage() {
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormDataState(prev => ({ ...prev, [name]: value }));
   };
 
   // 파일 입력 처리
@@ -479,7 +479,7 @@ export default function AdminPage() {
         const reader = new FileReader();
         reader.onload = (event) => {
           const content = event.target?.result as string;
-          setFormData(prev => ({
+          setFormDataState(prev => ({
             ...prev,
             lyrics: content,
             lyricsFile: file
@@ -487,7 +487,7 @@ export default function AdminPage() {
         };
         reader.readAsText(file);
       } else {
-        setFormData(prev => ({
+        setFormDataState(prev => ({
           ...prev,
           [type === 'audio' ? 'audioFile' : 'imageFile']: file
         }));
@@ -546,7 +546,7 @@ export default function AdminPage() {
   const handleCancelEdit = () => {
     setIsEditing(false);
     setSelectedSong(null);
-    setFormData({
+    setFormDataState({
       title: '',
       artist: 'Various Artists',
       chapter: '',
@@ -708,7 +708,7 @@ export default function AdminPage() {
     const selectedChapterId = e.target.value;
     const selectedChapter = chapters.find(ch => ch.id === selectedChapterId);
     
-    setFormData(prev => ({
+    setFormDataState(prev => ({
       ...prev,
       chapter: selectedChapterId,
       chapterId: parseInt(selectedChapterId)
@@ -865,7 +865,7 @@ export default function AdminPage() {
                   onClick={() => {
                     setModalMode('add');
                     setShowModal(true);
-                    setFormData({
+                    setFormDataState({
                       title: '',
                       artist: 'Various Artists',
                       chapter: '',
@@ -1188,8 +1188,8 @@ export default function AdminPage() {
                   <input
                     type="text"
                     id="title"
-                    value={formData.title}
-                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                    value={formDataState.title}
+                    onChange={(e) => setFormDataState({ ...formDataState, title: e.target.value })}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-black"
                     required
                   />
@@ -1201,7 +1201,7 @@ export default function AdminPage() {
                   </label>
                   <select
                     id="chapter"
-                    value={formData.chapter}
+                    value={formDataState.chapter}
                     onChange={handleChapterChange}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-black"
                     required
@@ -1221,8 +1221,8 @@ export default function AdminPage() {
                   </label>
                   <select
                     id="genre"
-                    value={formData.genreId}
-                    onChange={(e) => setFormData({ ...formData, genreId: e.target.value })}
+                    value={formDataState.genreId}
+                    onChange={(e) => setFormDataState({ ...formDataState, genreId: e.target.value })}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-black"
                   >
                     <option value="">장르 선택</option>
@@ -1238,8 +1238,8 @@ export default function AdminPage() {
                   <input
                     type="checkbox"
                     id="isNew"
-                    checked={formData.isNew}
-                    onChange={(e) => setFormData({ ...formData, isNew: e.target.checked })}
+                    checked={formDataState.isNew}
+                    onChange={(e) => setFormDataState({ ...formDataState, isNew: e.target.checked })}
                     className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                   />
                   <label htmlFor="isNew" className="ml-2 block text-sm text-gray-900">
@@ -1257,9 +1257,9 @@ export default function AdminPage() {
                     onChange={(e) => handleFileChange(e, 'audio')}
                     className="block w-full text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
                   />
-                  {(formData.fileUrl || selectedSong?.fileUrl) && (
+                  {(formDataState.fileUrl || selectedSong?.fileUrl) && (
                     <p className="mt-2 text-sm text-gray-600">
-                      현재 파일: {formData.fileUrl || selectedSong?.fileUrl}
+                      현재 파일: {formDataState.fileUrl || selectedSong?.fileUrl}
                     </p>
                   )}
                 </div>
@@ -1274,9 +1274,9 @@ export default function AdminPage() {
                     onChange={(e) => handleFileChange(e, 'image')}
                     className="block w-full text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
                   />
-                  {(formData.imageUrl || selectedSong?.imageUrl) && (
+                  {(formDataState.imageUrl || selectedSong?.imageUrl) && (
                     <p className="mt-2 text-sm text-gray-600">
-                      현재 파일: {formData.imageUrl || selectedSong?.imageUrl}
+                      현재 파일: {formDataState.imageUrl || selectedSong?.imageUrl}
                     </p>
                   )}
                 </div>
@@ -1287,8 +1287,8 @@ export default function AdminPage() {
                   </label>
                   <textarea
                     id="lyrics"
-                    value={formData.lyrics}
-                    onChange={(e) => setFormData({ ...formData, lyrics: e.target.value })}
+                    value={formDataState.lyrics}
+                    onChange={(e) => setFormDataState({ ...formDataState, lyrics: e.target.value })}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-black"
                     rows={5}
                   />
