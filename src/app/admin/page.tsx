@@ -184,17 +184,33 @@ export default function AdminPage() {
       };
 
       // multipart 요청 생성
-      const form = new FormData();
-      form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-      form.append('file', file);
+      const boundary = '-------314159265358979323846';
+      const delimiter = "\r\n--" + boundary + "\r\n";
+      const close_delim = "\r\n--" + boundary + "--";
+
+      const metadataPart = 
+        delimiter +
+        'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+        JSON.stringify(metadata);
+
+      const fileContent = await file.arrayBuffer();
+      const filePart = 
+        delimiter +
+        `Content-Type: ${file.type || 'application/octet-stream'}\r\n` +
+        'Content-Transfer-Encoding: base64\r\n\r\n' +
+        Buffer.from(fileContent).toString('base64');
+
+      const multipartRequestBody = metadataPart + filePart + close_delim;
 
       // Google Drive API 직접 호출
       const uploadResponse = await fetch('https://www.googleapis.com/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${accessToken}`
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': `multipart/related; boundary=${boundary}`,
+          'Content-Length': multipartRequestBody.length.toString()
         },
-        body: form
+        body: multipartRequestBody
       });
 
       if (!uploadResponse.ok) {
