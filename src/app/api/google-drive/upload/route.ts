@@ -1,21 +1,51 @@
 import { google } from 'googleapis';
 import { NextResponse } from 'next/server';
-import { Readable } from 'stream';
+import { prisma } from '@/lib/prisma';
 
-const oauth2Client = new google.auth.OAuth2(
-  process.env.GOOGLE_DRIVE_CLIENT_ID,
-  process.env.GOOGLE_DRIVE_CLIENT_SECRET,
-  process.env.GOOGLE_DRIVE_REDIRECT_URI
-);
+const drive = google.drive('v3');
 
-oauth2Client.setCredentials({
-  refresh_token: process.env.GOOGLE_DRIVE_REFRESH_TOKEN
-});
+async function getGoogleDriveConfig() {
+  // DB에서 설정 가져오기
+  const config = await prisma.appConfig.findFirst({
+    where: {
+      OR: [
+        { key: 'GOOGLE_DRIVE_CLIENT_ID' },
+        { key: 'GOOGLE_DRIVE_CLIENT_SECRET' },
+        { key: 'GOOGLE_DRIVE_REFRESH_TOKEN' }
+      ]
+    },
+    select: {
+      key: true,
+      value: true
+    }
+  });
 
-const drive = google.drive({ version: 'v3', auth: oauth2Client });
+  // 환경 변수에서 가져오기
+  const clientId = process.env.GOOGLE_DRIVE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_DRIVE_CLIENT_SECRET;
+  const refreshToken = process.env.GOOGLE_DRIVE_REFRESH_TOKEN;
+
+  if (!clientId || !clientSecret || !refreshToken) {
+    throw new Error('Google Drive configuration is missing');
+  }
+
+  return {
+    clientId,
+    clientSecret,
+    refreshToken
+  };
+}
 
 export async function POST(request: Request) {
   try {
+    const { clientId, clientSecret, refreshToken } = await getGoogleDriveConfig();
+
+    const auth = new google.auth.OAuth2(
+      clientId,
+      clientSecret
+    );
+    auth.setCredentials({ refresh_token: refreshToken });
+
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
     
@@ -38,6 +68,7 @@ export async function POST(request: Request) {
     const uploadedFile = await drive.files.create({
       requestBody: fileMetadata,
       media: media,
+      auth,
       fields: 'id,name'
     }).then(res => res.data);
 
@@ -51,7 +82,8 @@ export async function POST(request: Request) {
       requestBody: {
         role: 'reader',
         type: 'anyone'
-      }
+      },
+      auth
     });
 
     return NextResponse.json({
