@@ -8,9 +8,10 @@ interface AudioState {
   isLoading: boolean;
   error: string | null;
   volume: number;
+  isLooping: boolean;
 }
 
-export function useAudioPlayer(audioUrl: string | undefined) {
+export function useAudioPlayer(audioUrl: string | undefined, playMode: 'all' | 'one' | 'none' = 'none') {
   // 각 훅 인스턴스별로 고유한 오디오 객체 생성
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [audioState, setAudioState] = useState<AudioState>({
@@ -21,31 +22,51 @@ export function useAudioPlayer(audioUrl: string | undefined) {
     isLoading: false,
     error: null,
     volume: 1,
+    isLooping: playMode === 'one',  // playMode가 'one'일 때 반복 재생 활성화
   });
 
-  // 오디오 객체 초기화 및 이벤트 리스너 설정
+  // playMode가 변경될 때마다 isLooping 상태 업데이트
   useEffect(() => {
+    setAudioState(prev => ({ ...prev, isLooping: playMode === 'one' }));
+    if (audioRef.current) {
+      audioRef.current.loop = playMode === 'one';
+    }
+  }, [playMode]);
+
+  // 오디오 정리 함수
+  const cleanupAudio = useCallback(() => {
+    if (audioRef.current) {
+      // 재생 중지
+      audioRef.current.pause();
+      // 이벤트 리스너 제거
+      const audio = audioRef.current;
+      const events = ['loadstart', 'canplay', 'play', 'pause', 'timeupdate', 'ended', 'error'];
+      events.forEach(event => {
+        audio.removeEventListener(event, () => {});
+      });
+      // 소스 초기화
+      audio.src = '';
+      audio.load();
+      audioRef.current = null;
+    }
+  }, []);
+
+  // URL이 변경될 때마다 오디오 객체 초기화
+  useEffect(() => {
+    // 이전 오디오 정리
+    cleanupAudio();
+
     if (!audioUrl) {
       setAudioState(prev => ({ ...prev, isReady: false, error: null }));
       return;
     }
 
-    // 이전 오디오 객체 정리
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.src = '';
-      audioRef.current.load();
-    }
-
     setAudioState(prev => ({ ...prev, isLoading: true, error: null }));
 
-    // 새로운 오디오 객체 생성 (각 사용자별로 독립적인 인스턴스)
+    // 새로운 오디오 객체 생성
     const audio = new Audio();
-    audio.preload = 'auto';  // 자동 프리로드 설정
+    audio.preload = 'auto';
     audioRef.current = audio;
-
-    // 오디오 URL 설정
-    audio.src = audioUrl;
 
     // 오디오 이벤트 리스너
     const handlers = {
@@ -60,7 +81,16 @@ export function useAudioPlayer(audioUrl: string | undefined) {
       play: () => setAudioState(prev => ({ ...prev, isPlaying: true })),
       pause: () => setAudioState(prev => ({ ...prev, isPlaying: false })),
       timeupdate: () => setAudioState(prev => ({ ...prev, currentTime: audio.currentTime })),
-      ended: () => setAudioState(prev => ({ ...prev, isPlaying: false, currentTime: 0 })),
+      ended: () => {
+        if (playMode === 'one') {
+          // 한 곡 반복 모드면 처음부터 다시 재생
+          audio.currentTime = 0;
+          audio.play();
+        } else {
+          setAudioState(prev => ({ ...prev, isPlaying: false, currentTime: 0 }));
+          cleanupAudio(); // 재생이 끝나면 오디오 정리
+        }
+      },
       error: (e: ErrorEvent) => {
         console.error('Audio error:', e);
         setAudioState(prev => ({ 
@@ -69,6 +99,7 @@ export function useAudioPlayer(audioUrl: string | undefined) {
           isReady: false,
           isLoading: false
         }));
+        cleanupAudio(); // 에러 발생 시 오디오 정리
       }
     };
 
@@ -77,41 +108,32 @@ export function useAudioPlayer(audioUrl: string | undefined) {
       audio.addEventListener(event, handler as EventListener);
     });
 
+    // 오디오 소스 설정
+    audio.src = audioUrl;
+    audio.loop = playMode === 'one';  // playMode에 따라 반복 재생 설정
+
     // 컴포넌트 언마운트 시 정리
     return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        Object.entries(handlers).forEach(([event, handler]) => {
-          audioRef.current?.removeEventListener(event, handler as EventListener);
-        });
-        audioRef.current.src = '';
-        audioRef.current.load();
-        audioRef.current = null;
-      }
+      cleanupAudio();
     };
-  }, [audioUrl]);
+  }, [audioUrl, cleanupAudio, playMode]);
 
-  const play = useCallback(async () => {
-    if (!audioRef.current || !audioState.isReady) return;
-    try {
-      await audioRef.current.play();
-      setAudioState(prev => ({ ...prev, isPlaying: true }));
-    } catch (error) {
-      console.error('Playback failed:', error);
-      setAudioState(prev => ({ 
-        ...prev, 
-        error: '재생에 실패했습니다. 다시 시도해주세요.',
-        isPlaying: false,
-      }));
-      throw error;
-    }
-  }, [audioState.isReady]);
-
-  const pause = useCallback(() => {
+  // 재생/일시정지 토글
+  const togglePlay = useCallback(() => {
     if (!audioRef.current) return;
-    audioRef.current.pause();
-    setAudioState(prev => ({ ...prev, isPlaying: false }));
-  }, []);
+
+    if (audioState.isPlaying) {
+      audioRef.current.pause();
+    } else {
+      // 재생 전에 다른 모든 오디오 정지
+      document.querySelectorAll('audio').forEach(audio => {
+        if (audio !== audioRef.current) {
+          audio.pause();
+        }
+      });
+      audioRef.current.play();
+    }
+  }, [audioState.isPlaying]);
 
   const seek = useCallback((time: number) => {
     if (!audioRef.current || !audioState.isReady) return;
@@ -129,8 +151,7 @@ export function useAudioPlayer(audioUrl: string | undefined) {
 
   return {
     ...audioState,
-    play,
-    pause,
+    togglePlay,
     seek,
     setVolume,
   };

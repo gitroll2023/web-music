@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import type { SongWithChapter } from '@/types';
 import { useAudioPlayer } from './useAudioPlayer';
 
@@ -7,8 +7,9 @@ interface MusicPlayerState {
   playlist: SongWithChapter[];
   isPlaying: boolean;
   isShuffle: boolean;
-  playMode: 'all' | 'one';
+  playMode: 'all' | 'one' | 'none';
   volume: number;
+  currentAudioUrl: string | undefined;
 }
 
 export const useMusicPlayer = () => {
@@ -17,46 +18,75 @@ export const useMusicPlayer = () => {
     playlist: [],
     isPlaying: false,
     isShuffle: false,
-    playMode: 'all',
+    playMode: 'none',
     volume: 1,
+    currentAudioUrl: undefined,
   });
 
-  const { currentSong, playlist, isPlaying, isShuffle, playMode, volume } = state;
+  const { currentSong, playlist, isPlaying, isShuffle, playMode, volume, currentAudioUrl } = state;
 
-  // 재생 목록 설정
+  useEffect(() => {
+    const fetchAudioUrl = async () => {
+      if (currentSong?.id) {
+        try {
+          const response = await fetch(`/api/songs/${currentSong.id}/drive-url`);
+          if (response.ok) {
+            const data = await response.json();
+            setState(prev => ({ ...prev, currentAudioUrl: data.url }));
+          }
+        } catch (error) {
+          console.error('Failed to fetch audio URL:', error);
+          setState(prev => ({ ...prev, currentAudioUrl: undefined }));
+        }
+      } else {
+        setState(prev => ({ ...prev, currentAudioUrl: undefined }));
+      }
+    };
+
+    fetchAudioUrl();
+  }, [currentSong?.id]);
+
+  const {
+    currentTime,
+    duration,
+    isReady,
+    isLoading,
+    error,
+    togglePlay: audioTogglePlay,
+    seek,
+    setVolume: audioSetVolume,
+  } = useAudioPlayer(currentAudioUrl, playMode);
+
   const setPlaylist = useCallback((songs: SongWithChapter[]) => {
     setState(prev => ({ ...prev, playlist: songs }));
   }, []);
 
-  // 현재 곡 설정
   const setCurrentSong = useCallback((song: SongWithChapter | null) => {
     setState(prev => ({ ...prev, currentSong: song }));
   }, []);
 
-  // 재생/일시정지 토글
   const togglePlay = useCallback(() => {
+    audioTogglePlay();
     setState(prev => ({ ...prev, isPlaying: !prev.isPlaying }));
-  }, []);
+  }, [audioTogglePlay]);
 
-  // 셔플 모드 토글
   const toggleShuffle = useCallback(() => {
     setState(prev => ({ ...prev, isShuffle: !prev.isShuffle }));
   }, []);
 
-  // 재생 모드 변경
   const togglePlayMode = useCallback(() => {
     setState(prev => ({
       ...prev,
-      playMode: prev.playMode === 'all' ? 'one' : 'all',
+      playMode: prev.playMode === 'none' ? 'one' : 
+                prev.playMode === 'one' ? 'all' : 'none',
     }));
   }, []);
 
-  // 볼륨 조절
   const setVolume = useCallback((newVolume: number) => {
     setState(prev => ({ ...prev, volume: newVolume }));
-  }, []);
+    audioSetVolume(newVolume);
+  }, [audioSetVolume]);
 
-  // 다음 곡 선택
   const getNextSong = useCallback(() => {
     if (!currentSong || playlist.length === 0) return null;
 
@@ -76,7 +106,6 @@ export const useMusicPlayer = () => {
     return playlist[nextIndex];
   }, [currentSong, playlist, isShuffle, playMode]);
 
-  // 이전 곡 선택
   const getPreviousSong = useCallback(() => {
     if (!currentSong || playlist.length === 0) return null;
 
