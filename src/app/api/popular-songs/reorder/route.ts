@@ -12,7 +12,7 @@ export async function PUT(request: Request) {
       }
     });
 
-    // 변경하려는 곡의 현재 순서 찾기
+    // 변경하려는 곡의 현재 순서와 ID 찾기
     const currentSong = popularSongs.find(song => song.songId === songId);
     if (!currentSong) {
       return NextResponse.json(
@@ -22,12 +22,18 @@ export async function PUT(request: Request) {
     }
 
     const currentOrder = currentSong.order;
+    const currentId = currentSong.id;
 
-    // 순서 업데이트
-    if (newOrder > currentOrder) {
-      // 아래로 이동: 중간에 있는 곡들의 순서를 하나씩 위로 올림
-      await prisma.$transaction([
-        prisma.popularSong.updateMany({
+    // 순서가 같으면 변경하지 않음
+    if (currentOrder === newOrder) {
+      return NextResponse.json({ success: true });
+    }
+
+    // 순서 업데이트를 위한 트랜잭션
+    await prisma.$transaction(async (tx) => {
+      if (newOrder > currentOrder) {
+        // 아래로 이동
+        await tx.popularSong.updateMany({
           where: {
             order: {
               gt: currentOrder,
@@ -39,16 +45,10 @@ export async function PUT(request: Request) {
               decrement: 1
             }
           }
-        }),
-        prisma.popularSong.update({
-          where: { songId },
-          data: { order: newOrder }
-        })
-      ]);
-    } else if (newOrder < currentOrder) {
-      // 위로 이동: 중간에 있는 곡들의 순서를 하나씩 아래로 내림
-      await prisma.$transaction([
-        prisma.popularSong.updateMany({
+        });
+      } else {
+        // 위로 이동
+        await tx.popularSong.updateMany({
           where: {
             order: {
               gte: newOrder,
@@ -60,19 +60,21 @@ export async function PUT(request: Request) {
               increment: 1
             }
           }
-        }),
-        prisma.popularSong.update({
-          where: { songId },
-          data: { order: newOrder }
-        })
-      ]);
-    }
+        });
+      }
+
+      // 선택된 곡의 순서 변경 (id를 사용하여 업데이트)
+      await tx.popularSong.update({
+        where: { id: currentId },
+        data: { order: newOrder }
+      });
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error reordering popular song:', error);
+    console.error('Error reordering popular songs:', error);
     return NextResponse.json(
-      { error: 'Failed to reorder popular song' },
+      { error: 'Failed to reorder popular songs' },
       { status: 500 }
     );
   }

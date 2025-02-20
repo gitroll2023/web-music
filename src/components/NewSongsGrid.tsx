@@ -1,7 +1,8 @@
 'use client';
 
-import { memo, useMemo, useState, useRef } from 'react';
+import { memo, useMemo, useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useSwipeable } from 'react-swipeable';
 import type { SongWithChapter } from '@/types';
 import CachedImage from './CachedImage';
 import { getProxiedImageUrl } from '@/utils/imageUtils';
@@ -14,13 +15,11 @@ interface Props {
   onPlayAllAction: (songs: SongWithChapter[]) => Promise<void>;
 }
 
-const ITEMS_PER_PAGE = 5;
+const ITEMS_PER_PAGE = 4;
 
 function NewSongsGrid({ songs, onSongSelectAction, isDarkMode, onPlayAllAction }: Props) {
   const [currentPage, setCurrentPage] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [touchStart, setTouchStart] = useState<number | null>(null);
-  const [touchEnd, setTouchEnd] = useState<number | null>(null);
 
   const newSongs = useMemo(() => 
     songs
@@ -39,44 +38,22 @@ function NewSongsGrid({ songs, onSongSelectAction, isDarkMode, onPlayAllAction }
     (currentPage + 1) * ITEMS_PER_PAGE
   );
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    setTouchStart(e.targetTouches[0].clientX);
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    setTouchEnd(e.targetTouches[0].clientX);
-  };
-
-  const handleTouchEnd = () => {
-    if (!touchStart || !touchEnd) return;
-    
-    const distance = touchStart - touchEnd;
-    const isLeftSwipe = distance > 50;
-    const isRightSwipe = distance < -50;
-
-    if (isLeftSwipe && currentPage < totalPages - 1) {
-      setCurrentPage(prev => prev + 1);
-    }
-
-    if (isRightSwipe && currentPage > 0) {
-      setCurrentPage(prev => prev - 1);
-    }
-
-    setTouchStart(null);
-    setTouchEnd(null);
-  };
-
-  const goToNextPage = () => {
-    if (currentPage < totalPages - 1) {
-      setCurrentPage(prev => prev + 1);
-    }
-  };
-
-  const goToPrevPage = () => {
-    if (currentPage > 0) {
-      setCurrentPage(prev => prev - 1);
-    }
-  };
+  const handlers = useSwipeable({
+    onSwipedLeft: () => {
+      if (currentPage < totalPages - 1) {
+        setCurrentPage(prev => prev + 1);
+      }
+    },
+    onSwipedRight: () => {
+      if (currentPage > 0) {
+        setCurrentPage(prev => prev - 1);
+      }
+    },
+    trackMouse: true,
+    preventScrollOnSwipe: true,
+    swipeDuration: 500,
+    delta: 10,
+  });
 
   if (newSongs.length === 0) return null;
 
@@ -111,11 +88,8 @@ function NewSongsGrid({ songs, onSongSelectAction, isDarkMode, onPlayAllAction }
         </div>
 
         <div 
-          ref={containerRef}
-          className="relative overflow-hidden"
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
+          {...handlers}
+          className="relative overflow-hidden touch-pan-y"
         >
           <AnimatePresence mode="wait">
             <motion.div
@@ -123,7 +97,7 @@ function NewSongsGrid({ songs, onSongSelectAction, isDarkMode, onPlayAllAction }
               initial={{ opacity: 0, x: 100 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -100 }}
-              transition={{ duration: 0.3 }}
+              transition={{ type: "spring", stiffness: 300, damping: 30 }}
               className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4"
             >
               {currentSongs.map((song, index) => (
@@ -184,7 +158,7 @@ function NewSongsGrid({ songs, onSongSelectAction, isDarkMode, onPlayAllAction }
           {/* Navigation arrows */}
           {currentPage > 0 && (
             <button
-              onClick={goToPrevPage}
+              onClick={() => setCurrentPage(prev => prev - 1)}
               className={`
                 absolute left-0 top-1/2 -translate-y-1/2 z-10
                 p-2 rounded-full shadow-lg
@@ -196,7 +170,7 @@ function NewSongsGrid({ songs, onSongSelectAction, isDarkMode, onPlayAllAction }
           )}
           {currentPage < totalPages - 1 && (
             <button
-              onClick={goToNextPage}
+              onClick={() => setCurrentPage(prev => prev + 1)}
               className={`
                 absolute right-0 top-1/2 -translate-y-1/2 z-10
                 p-2 rounded-full shadow-lg

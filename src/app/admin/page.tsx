@@ -851,16 +851,23 @@ export default function AdminPage() {
   // 인기곡 순서 변경
   const handleReorderPopularSong = async (songId: number, newOrder: number) => {
     try {
-      await fetch(getApiUrl('/api/popular-songs/reorder'), {
+      const response = await fetch(getApiUrl('/api/popular-songs/reorder'), {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ songId, newOrder }),
       });
-      fetchSongs();
+
+      if (!response.ok) {
+        throw new Error('Failed to reorder popular song');
+      }
+
+      // 성공적으로 순서가 변경되면 곡 목록을 다시 불러옴
+      await fetchSongs();
     } catch (error) {
       console.error('Error reordering popular song:', error);
+      toast.error('인기곡 순서 변경에 실패했습니다.');
     }
   };
 
@@ -1483,7 +1490,11 @@ export default function AdminPage() {
                 <div className="space-y-4">
                   {songs
                     .filter(song => song.popularSong)
-                    .sort((a, b) => (a.popularSong?.order || 0) - (b.popularSong?.order || 0))
+                    .sort((a, b) => {
+                      const orderA = a.popularSong?.order ?? 0;
+                      const orderB = b.popularSong?.order ?? 0;
+                      return orderA - orderB;
+                    })
                     .map((song, index) => (
                       <div
                         key={song.id}
@@ -1492,7 +1503,7 @@ export default function AdminPage() {
                         <div className="flex items-center space-x-4">
                           <div className="flex items-center space-x-3">
                             <span className="flex items-center justify-center w-8 h-8 text-lg font-semibold text-indigo-600 bg-indigo-50 rounded-full">
-                              {(song.popularSong?.order || 0) + 1}
+                              {index + 1}
                             </span>
                             <div>
                               <h3 className={`font-medium text-gray-900 ${song.title.length > 30 ? 'text-sm' : ''}`}>
@@ -1504,7 +1515,7 @@ export default function AdminPage() {
                         <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                           {index > 0 && (
                             <button
-                              onClick={() => handleReorderPopularSong(song.id, (song.popularSong?.order || 0) - 1)}
+                              onClick={() => handleReorderPopularSong(song.id, index - 1)}
                               className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors duration-200"
                               title="위로 이동"
                             >
@@ -1515,7 +1526,7 @@ export default function AdminPage() {
                           )}
                           {index < songs.filter(s => s.popularSong).length - 1 && (
                             <button
-                              onClick={() => handleReorderPopularSong(song.id, (song.popularSong?.order || 0) + 1)}
+                              onClick={() => handleReorderPopularSong(song.id, index + 1)}
                               className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors duration-200"
                               title="아래로 이동"
                             >
