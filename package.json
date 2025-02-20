@@ -23,7 +23,7 @@
     "@types/pg": "^8.11.11",
     "clsx": "^2.1.1",
     "dotenv": "^16.4.7",
-    "framer-motion": "^12.4.2",
+    "framer-motion": "^11.0.5",
     "google-auth-library": "^9.15.0",
     "google-spreadsheet": "^4.1.4",
     "googleapis": "^144.0.0",

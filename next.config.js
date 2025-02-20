@@ -4,6 +4,15 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: '50mb'
     }
+  },
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        util: false
+      };
+    }
+    return config;
   }
 };
 
