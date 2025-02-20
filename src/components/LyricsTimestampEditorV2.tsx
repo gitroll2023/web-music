@@ -58,10 +58,17 @@ const LyricsTimestampEditor: React.FC<LyricsTimestampEditorProps> = ({
         .filter(line => line.trim() !== '')
         .filter(line => !line.trim().startsWith('---'));
 
-      const hasAnyTimestamp = lines.some(line => /^\[\d{2}:\d{2}\.\d{2}\]/.test(line));
+      // 첫 번째 라인에 [00:00.00] 공백 라인이 없으면 추가
+      if (lines.length === 0 || (lines[0] !== '[00:00.00]' && lines[0] !== '[00:00.00] ')) {
+        lines.unshift('[00:00.00]');
+      }
 
+      // 나머지 라인들에 대해 타임스탬프가 전혀 없는 경우 처리
+      const hasAnyTimestamp = lines.slice(1).some(line => /^\[\d{2}:\d{2}\.\d{2}\]/.test(line));
       if (!hasAnyTimestamp) {
-        lines = lines.map(line => `[00:00.00]${line}`);
+        lines = lines.map((line, index) => 
+          index === 0 ? line : `[00:00.00]${line}`
+        );
       }
 
       const timestampInfos: TimestampInfo[] = [];
