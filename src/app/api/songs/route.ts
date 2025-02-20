@@ -128,13 +128,22 @@ function parseLyricsTimestamps(lyrics: string) {
 
 export async function POST(request: Request) {
   try {
+    console.log('POST /api/songs - Start');
     const formData = await request.formData();
+    
+    // FormData 전체 내용 로깅
+    const formDataEntries = Array.from(formData.entries());
+    console.log('FormData entries:', formDataEntries.map(([key, value]) => {
+      if (value instanceof File) {
+        return [key, { name: value.name, type: value.type, size: value.size }];
+      }
+      return [key, value];
+    }));
     
     // 기본 정보 추출
     const title = formData.get('title') as string;
     const artist = formData.get('artist') as string;
-    const chapterId = formData.get('chapter') as string;
-    const genreId = formData.get('genreId') as string;
+    const chapterId = formData.get('chapterId') as string;
     const lyrics = formData.get('lyrics') as string;
     const isNew = formData.get('isNew') === 'true';
     const driveFileId = formData.get('driveFileId') as string;
@@ -143,15 +152,57 @@ export async function POST(request: Request) {
     const imageId = formData.get('imageId') as string;
     const imageUrl = formData.get('imageUrl') as string;
 
+    console.log('Extracted data:', {
+      title,
+      artist,
+      chapterId,
+      lyrics: lyrics?.substring(0, 100) + '...',
+      isNew,
+      driveFileId,
+      fileUrl,
+      duration,
+      imageId,
+      imageUrl
+    });
+
     // 필수 필드 검증
     if (!title || !chapterId) {
+      console.error('Missing required fields:', { title, chapterId });
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
       );
     }
 
+    // 장르 ID
+    let genreId = formData.get('genreId')?.toString();
+    console.log('Received genreId:', genreId);
+
+    if (!genreId) {
+      console.error('Genre ID is required');
+      return NextResponse.json(
+        { error: 'Genre ID is required' },
+        { status: 400 }
+      );
+    }
+
+    // 장르가 존재하는지 확인
+    const genre = await prisma.genre.findUnique({
+      where: { id: genreId }
+    });
+
+    if (!genre) {
+      console.error('Genre not found:', genreId);
+      return NextResponse.json(
+        { error: 'Genre not found' },
+        { status: 400 }
+      );
+    }
+
+    console.log('Using genre:', genre);
+
     // 챕터 찾기
+    console.log('Finding chapter with ID:', chapterId);
     const chapter = await prisma.chapter.findUnique({
       where: { id: parseInt(chapterId) },
       include: {
@@ -160,60 +211,86 @@ export async function POST(request: Request) {
     });
 
     if (!chapter) {
+      console.error('Chapter not found:', chapterId);
       return NextResponse.json(
         { error: 'Chapter not found' },
         { status: 404 }
       );
     }
 
-    // 파일명 생성 (챕터번호-순번)
-    const fileName = `${chapter.id}-${chapter.songs.length + 1}`;
+    console.log('Found chapter:', chapter);
 
-    // unknown 장르가 없으면 생성
-    let finalGenreId = genreId;
-    if (!finalGenreId) {
-      const unknownGenre = await prisma.genre.findUnique({
-        where: { id: 'unknown' }
-      });
-
-      if (!unknownGenre) {
-        await prisma.genre.create({
-          data: {
-            id: 'unknown',
-            name: '미분류'
-          }
-        });
-      }
-      finalGenreId = 'unknown';
+    // 챕터 번호 추출 (예: "계시록 22장" -> "22")
+    const chapterNumber = chapter.name.match(/\d+/)?.[0];
+    if (!chapterNumber) {
+      console.error('Invalid chapter name format:', chapter.name);
+      return NextResponse.json(
+        { error: 'Invalid chapter name format' },
+        { status: 400 }
+      );
     }
 
+    // 해당 챕터의 기존 곡들 조회하여 다음 순번 결정
+    const existingSongs = await prisma.song.findMany({
+      where: { chapterId: chapter.id },
+      orderBy: { fileName: 'desc' }
+    });
+
+    // 현재 챕터의 마지막 파일 번호 찾기
+    let lastNumber = 0;
+    for (const song of existingSongs) {
+      const match = song.fileName?.match(new RegExp(`^${chapterNumber}-(\\d+)$`));
+      if (match) {
+        const num = parseInt(match[1]);
+        if (num > lastNumber) lastNumber = num;
+      }
+    }
+
+    // 새로운 파일명 생성 (예: "22-1", "22-2" 등)
+    const fileName = `${chapterNumber}-${lastNumber + 1}`;
+    console.log('Generated fileName:', fileName);
+
     // 곡 생성
+    console.log('Creating song with data:', {
+      title,
+      artist,
+      chapterId,
+      genreId,
+      lyrics: lyrics?.substring(0, 100) + '...',
+      isNew,
+      driveFileId,
+      fileUrl,
+      duration,
+      imageId,
+      imageUrl,
+      fileName
+    });
+
     const song = await prisma.song.create({
       data: {
         title,
-        fileName,
-        artist: artist || 'Various Artists',
+        artist,
         chapterId: parseInt(chapterId),
-        genreId: finalGenreId,
-        lyrics: lyrics || '',
+        genreId,
+        lyrics,
         isNew,
         driveFileId,
         fileUrl,
-        duration,
+        duration: duration ? duration : null,
         imageId,
-        imageUrl
-      },
-      include: {
-        chapter: true,
-        genre: true
+        imageUrl,
+        fileName
       }
     });
 
+    console.log('Song created successfully:', song);
+
     return NextResponse.json(song);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error creating song:', error);
+    console.error('Error stack:', error.stack);
     return NextResponse.json(
-      { error: 'Failed to create song' },
+      { error: error.message || 'Failed to create song' },
       { status: 500 }
     );
   }
@@ -393,7 +470,7 @@ export async function PUT(request: Request) {
         artist: artist || null,
         driveFileId: driveFileId || undefined,
         fileUrl: fileUrl || undefined,
-        duration: duration || undefined,
+        duration: duration ? String(duration) : null,
         imageId: imageId || undefined,
         imageUrl: imageUrl || undefined,
         lyrics: lyrics || null,

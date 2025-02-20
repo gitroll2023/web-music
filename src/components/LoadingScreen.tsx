@@ -134,8 +134,8 @@ const LoadingScreen: React.FC<LoadingScreenProps> = ({ isDarkMode }) => {
           animate={{ opacity: 1 }}
           transition={{ delay: 0.7 }}
         >
-          <p className="text-sm">Version: 1.3.0</p>
-          <p className="text-sm">Update 2025.02.18</p>
+          <p className="text-sm">Version: 1.4.0</p>
+          <p className="text-sm">Update 2025.02.20</p>
         </motion.div>
       </motion.div>
     </AnimatePresence>

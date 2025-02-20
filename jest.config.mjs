@@ -1,18 +1,17 @@
-export default {
+import nextJest from 'next/jest.js';
+
+const createJestConfig = nextJest({
+  // next.config.js와 .env 파일이 있는 경로
+  dir: './',
+});
+
+// Jest에 전달할 설정
+const customJestConfig = {
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.mjs'],
   testEnvironment: 'jest-environment-jsdom',
-  setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
-  testPathIgnorePatterns: ['<rootDir>/.next/', '<rootDir>/node_modules/'],
   moduleNameMapper: {
-    '^@/components/(.*)$': '<rootDir>/src/components/$1',
-    '^@/lib/(.*)$': '<rootDir>/src/lib/$1',
-    '^@/types$': '<rootDir>/src/types',
-    '\\.(css|less|sass|scss)$': 'identity-obj-proxy',
+    '^@/(.*)$': '<rootDir>/src/$1',
   },
-  transform: {
-    '^.+\\.(ts|tsx)$': ['babel-jest', { presets: ['next/babel'] }],
-  },
-  transformIgnorePatterns: [
-    '/node_modules/',
-    '^.+\\.module\\.(css|sass|scss)$',
-  ],
 };
+
+export default createJestConfig(customJestConfig);

@@ -275,6 +275,17 @@ const SongGrid = ({ songs, onSongSelect, onPlayAllAction, isDarkMode, toast, gen
   const [selectedGenre, setSelectedGenre] = useState<string | ''>('');
   const [tempSearchQuery, setTempSearchQuery] = useState('');
   const [isSearchMode, setIsSearchMode] = useState(false);
+  const [isNoticeVisible, setIsNoticeVisible] = useState(() => {
+    const hiddenUntil = localStorage.getItem('noticeHiddenUntil');
+    if (!hiddenUntil) return true;
+    return new Date().getTime() > parseInt(hiddenUntil);
+  });
+
+  const handleCloseNotice = () => {
+    const expiryTime = new Date().getTime() + (60 * 60 * 1000); // 1시간
+    localStorage.setItem('noticeHiddenUntil', expiryTime.toString());
+    setIsNoticeVisible(false);
+  };
 
   // 검색어 변경 핸들러
   const handleSearchChange = useCallback((value: string) => {
@@ -684,6 +695,36 @@ const SongGrid = ({ songs, onSongSelect, onPlayAllAction, isDarkMode, toast, gen
       <div className="px-4 py-6">
         {renderSearchForm()}
 
+        {/* 앱 설명 */}
+        {isNoticeVisible && (
+          <div className="relative mb-8 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-700 shadow-sm animate-fade-in">
+            <button
+              onClick={handleCloseNotice}
+              className="absolute top-2 right-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            <div className="flex items-center gap-2 mb-3">
+              <h2 className="text-base font-semibold text-gray-900 dark:text-white">앱사용 주의사항</h2>
+            </div>
+            <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+              해당 앱은 요한계시록 <span className="inline-block px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100 rounded-full">개역한글</span>로 제작한 성경 AI노래앱입니다. 
+              노래 제작 AI가 부드럽게 노래를 부르려고 하다보니, 구절이나 토시가 
+              사라지는 경우도 있습니다. 최대한 괄호()로 처리해놓고 있습니다.
+              <br /><br />
+              <div className="p-3 bg-yellow-50 dark:bg-gray-700 border-l-4 border-yellow-400 dark:border-yellow-500">
+                <p className="font-medium text-yellow-800 dark:text-yellow-100">
+                  혹여 해당 이유로 듣기 불편하시거나 문제 될 것 같다면, 
+                  이 앱 사용을 중지하십시오. 가볍게 듣고 암기목적으로 만든 앱이오나, 
+                  사용을 거부하시는 분들은 사용을 금해주세요.
+                </p>
+              </div>
+            </p>
+          </div>
+        )}
+
         {/* 인기 TOP 5 */}
         {!isSearchMode && (
           <div className="mb-12">
@@ -715,7 +756,7 @@ const SongGrid = ({ songs, onSongSelect, onPlayAllAction, isDarkMode, toast, gen
           <div className={`h-px w-full ${isDarkMode ? 'bg-gray-800' : 'bg-gray-200'} mb-8`}></div>
           <div className={`text-center mb-8 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
             <p className="whitespace-pre-line text-lg leading-relaxed">
-              이 앱은 <span className={`inline-block px-2 py-0.5 text-sm rounded-md ${isDarkMode ? 'bg-gray-700 text-gray-200' : 'bg-gray-200 text-gray-700'}`}>개역한글</span> 요한계시록의{'\n'}말씀을 그대로 암송할 수 있도록{'\n'}AI가 작곡한 음악과 함께 제공됩니다.{'\n'}말씀과 음악으로 은혜로운 시간 보내세요.
+              이 앱은 <span className="inline-block px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100 rounded-full">개역한글</span> 요한계시록의{'\n'}말씀을 그대로 암송할 수 있도록{'\n'}AI가 작곡한 음악과 함께 제공됩니다.{'\n'}말씀과 음악으로 은혜로운 시간 보내세요.
             </p>
           </div>
           <h2 className={`text-2xl font-bold mb-6 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>

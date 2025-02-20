@@ -114,7 +114,7 @@ export default function Settings({
         </h2>
         <div className="space-y-2 text-sm text-text-secondary">
           <p>AI 계시록 뮤직 웹 플레이어</p>
-          <p>버전: 1.3.0</p>
+          <p>버전: 1.4.0</p>
           
         </div>
       </section>

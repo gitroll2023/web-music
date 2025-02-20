@@ -92,22 +92,26 @@ const MusicPlayerClient: React.FC<MusicPlayerClientProps> = ({
 
   // 다음 곡 재생
   const handleNextSong = useCallback(() => {
-    if (!selectedSong || !localSongs.length) return;
+    if (!selectedSong || localSongs.length === 0) return;
 
     let newIndex = 0;
     if (isShuffle) {
-      // 셔플 모드: 랜덤한 곡 선택
       newIndex = Math.floor(Math.random() * localSongs.length);
     } else {
-      // 일반 모드: 다음 곡
       const currentSongIndex = localSongs.findIndex(song => song.id === selectedSong.id);
       if (currentSongIndex === -1) return;
       newIndex = currentSongIndex + 1;
+      
       if (newIndex >= localSongs.length) {
-        if (playMode === 'all') {
+        if (playMode === 'one') {
+          // 한 곡 반복 모드면 현재 곡 다시 재생
+          newIndex = currentSongIndex;
+        } else if (playMode === 'all') {
+          // 전체 반복 모드면 처음으로
           newIndex = 0;
         } else {
-          toast.error('다음 곡이 없습니다.');
+          // 반복 없음 모드면 재생 중지
+          setIsPlaying(false);
           return;
         }
       }
@@ -119,22 +123,26 @@ const MusicPlayerClient: React.FC<MusicPlayerClientProps> = ({
 
   // 이전 곡 재생
   const handlePrevSong = useCallback(() => {
-    if (!selectedSong || !localSongs.length) return;
+    if (!selectedSong || localSongs.length === 0) return;
 
     let newIndex = 0;
     if (isShuffle) {
-      // 셔플 모드: 랜덤한 곡 선택
       newIndex = Math.floor(Math.random() * localSongs.length);
     } else {
-      // 일반 모드: 이전 곡
       const currentSongIndex = localSongs.findIndex(song => song.id === selectedSong.id);
       if (currentSongIndex === -1) return;
       newIndex = currentSongIndex - 1;
+      
       if (newIndex < 0) {
-        if (playMode === 'all') {
+        if (playMode === 'one') {
+          // 한 곡 반복 모드면 현재 곡 다시 재생
+          newIndex = currentSongIndex;
+        } else if (playMode === 'all') {
+          // 전체 반복 모드면 마지막으로
           newIndex = localSongs.length - 1;
         } else {
-          toast.error('이전 곡이 없습니다.');
+          // 반복 없음 모드면 재생 중지
+          setIsPlaying(false);
           return;
         }
       }
@@ -166,71 +174,36 @@ const MusicPlayerClient: React.FC<MusicPlayerClientProps> = ({
 
   // 재생/일시정지 액션
   const handlePlayPause = useCallback(async () => {
-    console.log('=== handlePlayPause ===');
-    console.log('Current state before action:', {
-      isPlaying,
-      currentTime,
-      duration,
-      audioUrl,
-      isAudioReady
-    });
-
-    if (!isAudioReady) {
-      console.log('Audio not ready, cannot play/pause');
-      return;
-    }
-
-    console.log('Calling togglePlay...');
     const audio = audioRef.current;
     if (!audio || !selectedSong) return;
 
-    console.log('Toggle Play/Pause:', {
-      paused: audio.paused,
-      currentTime: audio.currentTime,
-      lastPosition,
-      isPlaying,
-      readyState: audio.readyState,
-      src: audio.src
-    });
-
     try {
       if (audio.paused) {
-        // 재생
+        // 재생하기 전에 기존 오디오 정리
+        audio.pause();
+        audio.currentTime = 0;
+        
         if (!audio.src || audio.src.endsWith('/undefined')) {
           if (!selectedSong.driveFileId) {
             console.error('No drive file ID available');
             return;
           }
           const proxyUrl = getApiUrl(`/api/proxy/${selectedSong.driveFileId}`);
-          console.log('Setting new audio source:', proxyUrl);
           audio.src = proxyUrl;
           audio.load();
         }
         
-        // 저장된 위치가 있으면 해당 위치부터 재생
-        if (lastPosition > 0 && lastPosition < audio.duration) {
-          console.log('Restoring position:', lastPosition);
-          audio.currentTime = lastPosition;
-        }
-        
         await audio.play();
-        console.log('Started playing from:', audio.currentTime);
         setIsPlaying(true);
       } else {
-        // 일시정지 - 현재 위치 저장
-        const currentPos = audio.currentTime;
-        console.log('Pausing at position:', currentPos);
-        setLastPosition(currentPos);
-        await audio.pause();
-        console.log('Paused. Last position saved:', currentPos);
+        audio.pause();
         setIsPlaying(false);
       }
     } catch (error) {
       console.error('Playback error:', error);
       handlePlayError(error);
     }
-    console.log('======================');
-  }, [selectedSong, lastPosition, isPlaying, currentTime, duration, audioUrl, isAudioReady]);
+  }, [selectedSong]);
 
   const handlePlayError = (error: any) => {
     console.error('Playback error:', error);
@@ -311,6 +284,14 @@ const MusicPlayerClient: React.FC<MusicPlayerClientProps> = ({
     const audio = audioRef.current;
     if (!selectedSong || !audio) return;
 
+    // 기존 오디오 정리
+    if (audio.src) {
+      audio.pause();
+      audio.currentTime = 0;
+      audio.src = '';
+      setIsAudioReady(false);
+    }
+
     const loadAndPlay = async () => {
       try {
         if (!selectedSong?.driveFileId) {
@@ -343,6 +324,16 @@ const MusicPlayerClient: React.FC<MusicPlayerClientProps> = ({
     };
 
     loadAndPlay();
+
+    // cleanup 함수
+    return () => {
+      if (audio.src) {
+        audio.pause();
+        audio.currentTime = 0;
+        audio.src = '';
+        setIsAudioReady(false);
+      }
+    };
   }, [selectedSong, isPlaying]);
 
   // 오디오 이벤트 리스너

@@ -2,36 +2,45 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import type { Song, Chapter } from '@prisma/client';
+import type { Song, Chapter as PrismaChapter, Genre as PrismaGenre } from '@prisma/client';
 import { FiEdit2, FiTrash2, FiStar, FiClock, FiList, FiPlusCircle, FiCopy } from 'react-icons/fi';
 import { toast } from 'react-hot-toast';
 import LyricsTimestampEditorV2 from '@/components/LyricsTimestampEditorV2';
 import { getApiUrl } from '@/utils/config';
 
 interface SongWithChapter extends Song {
-  chapter: Chapter | null;
+  chapter: PrismaChapter | null;
+  genre: PrismaGenre | null;
   popularSong: any;
+}
+
+interface LocalChapter {
+  id: number;
+  name: string;
 }
 
 interface FormData {
   title: string;
   artist: string;
-  chapter: string;
-  chapterId: number;
+  chapterId: string; 
   genreId: string;
   audioFile: File | null;
   imageFile: File | null;
   lyrics: string;
-  lyricsFile: File | null;
   isNew: boolean;
+  duration: string;
   driveFileId: string;
   fileUrl: string;
-  duration: string;
   imageId: string;
   imageUrl: string;
 }
 
 interface Genre {
+  id: string;
+  name: string;
+}
+
+interface NewGenre {
   id: string;
   name: string;
 }
@@ -45,33 +54,82 @@ interface LyricsCard {
   section: string;
 }
 
+const initialFormData: FormData = {
+  title: '',
+  artist: 'Various Artists',
+  chapterId: '', 
+  genreId: '',
+  audioFile: null,
+  imageFile: null,
+  lyrics: '',
+  isNew: false,
+  duration: '',
+  driveFileId: '',
+  fileUrl: '',
+  imageId: '',
+  imageUrl: ''
+};
+
+// 색상 팔레트
+const colorPalettes = [
+  { bg: 'bg-pink-100', text: 'text-pink-800' },
+  { bg: 'bg-blue-100', text: 'text-blue-800' },
+  { bg: 'bg-purple-100', text: 'text-purple-800' },
+  { bg: 'bg-yellow-100', text: 'text-yellow-800' },
+  { bg: 'bg-red-100', text: 'text-red-800' },
+  { bg: 'bg-indigo-100', text: 'text-indigo-800' },
+  { bg: 'bg-green-100', text: 'text-green-800' },
+  { bg: 'bg-orange-100', text: 'text-orange-800' },
+  { bg: 'bg-teal-100', text: 'text-teal-800' },
+  { bg: 'bg-cyan-100', text: 'text-cyan-800' },
+  { bg: 'bg-lime-100', text: 'text-lime-800' },
+  { bg: 'bg-emerald-100', text: 'text-emerald-800' },
+  { bg: 'bg-sky-100', text: 'text-sky-800' },
+  { bg: 'bg-violet-100', text: 'text-violet-800' },
+  { bg: 'bg-fuchsia-100', text: 'text-fuchsia-800' },
+  { bg: 'bg-rose-100', text: 'text-rose-800' }
+];
+
+// 장르 ID를 기반으로 일관된 색상 생성
+const getGenreColor = (genreId: string) => {
+  // 미리 정의된 색상이 있으면 사용
+  const predefinedColors: { [key: string]: string } = {
+    'k-pop': 'bg-pink-100 text-pink-800',
+    'ballad': 'bg-blue-100 text-blue-800',
+    'dance': 'bg-purple-100 text-purple-800',
+    'hiphop': 'bg-yellow-100 text-yellow-800',
+    'rock': 'bg-red-100 text-red-800',
+    'rnb': 'bg-indigo-100 text-indigo-800',
+    'indie': 'bg-green-100 text-green-800'
+  };
+
+  if (predefinedColors[genreId]) {
+    return predefinedColors[genreId];
+  }
+
+  // 없으면 genreId를 기반으로 일관된 색상 선택
+  const hash = genreId.split('').reduce((acc, char) => {
+    return char.charCodeAt(0) + ((acc << 5) - acc);
+  }, 0);
+  const index = Math.abs(hash) % colorPalettes.length;
+  const palette = colorPalettes[index];
+  return `${palette.bg} ${palette.text}`;
+};
+
 export default function AdminPage() {
   const router = useRouter();
   const [songs, setSongs] = useState<SongWithChapter[]>([]);
-  const [genres, setGenres] = useState<Genre[]>([]);
+  const [genres, setGenres] = useState<PrismaGenre[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [selectedSong, setSelectedSong] = useState<SongWithChapter | null>(null);
   const [showLyricsEditorV2, setShowLyricsEditorV2] = useState(false);
   const [activeTab, setActiveTab] = useState<'list' | 'genres' | 'lyrics' | 'popular' | 'new'>('list');
-  const [formDataState, setFormDataState] = useState<FormData>({
-    title: '',
-    artist: 'Various Artists',
-    chapter: '',
-    chapterId: 0,
-    genreId: '',
-    audioFile: null,
-    imageFile: null,
-    lyrics: '',
-    lyricsFile: null,
-    isNew: false,
-    driveFileId: '',
-    fileUrl: '',
-    duration: '',
-    imageId: '',
-    imageUrl: ''
+  const [formDataState, setFormDataState] = useState<FormData>(initialFormData);
+  const [newGenre, setNewGenre] = useState<NewGenre>({
+    id: '',
+    name: ''
   });
-  const [genreFormData, setGenreFormData] = useState({ id: '', name: '' });
   const [editingGenreId, setEditingGenreId] = useState<string | null>(null);
   const [selectedChapter, setSelectedChapter] = useState<string>('전체');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -120,8 +178,8 @@ export default function AdminPage() {
   };
 
   // 챕터 목록 생성
-  const chapters = Array.from({ length: 22 }, (_, i) => ({
-    id: (i + 1).toString(),
+  const chapters: LocalChapter[] = Array.from({ length: 22 }, (_, i) => ({
+    id: i + 1,
     name: `계시록 ${i + 1}장`
   }));
 
@@ -143,274 +201,367 @@ export default function AdminPage() {
   // 곡 목록 불러오기
   const fetchSongs = async () => {
     try {
-      const response = await fetch(getApiUrl('/api/songs?limit=100')); // 한 번에 더 많은 곡을 가져오도록 수정
+      const response = await fetch(getApiUrl('/api/songs?limit=100')); 
       if (!response.ok) throw new Error('Failed to fetch songs');
       const data = await response.json();
-      setSongs(data.songs); // songs 배열은 data.songs에 있음
+      setSongs(data.songs); 
     } catch (error) {
       console.error('Error fetching songs:', error);
       toast.error('곡 목록을 불러오는데 실패했습니다.');
     }
   };
 
-  // 장르 목록 불러오기
+  // 장르 목록 가져오기
   const fetchGenres = async () => {
     try {
-      const response = await fetch(getApiUrl('/api/genres'));
-      if (!response.ok) throw new Error('Failed to fetch genres');
+      const response = await fetch('/api/genres');
+      if (!response.ok) {
+        throw new Error('Failed to fetch genres');
+      }
       const data = await response.json();
       setGenres(data);
     } catch (error) {
       console.error('Error fetching genres:', error);
+      toast.error('장르 목록을 가져오는데 실패했습니다.');
     }
   };
 
-  // 파일 업로드 처리
-  const handleFileUpload = async (file: File, type: 'audio' | 'image') => {
-    if (!file || !formDataState.chapter) return null;
+  // 오디오 파일 duration 가져오기
+  const getAudioDuration = (file: File): Promise<number> => {
+    return new Promise((resolve) => {
+      const audio = new Audio();
+      audio.src = URL.createObjectURL(file);
+      audio.onloadedmetadata = () => {
+        URL.revokeObjectURL(audio.src);
+        resolve(audio.duration);
+      };
+    });
+  };
+
+  // 파일 업로드 핸들러
+  const onFileUpload = async (file: File, type: 'audio' | 'image' | 'lyrics') => {
+    if (!file) return null;
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('type', type);
+    formData.append('chapterId', formDataState.chapterId.toString());
+
+    // 수정 모드에서 이미지 파일 업로드 시 기존 파일명 전달
+    if (modalMode === 'edit' && type === 'image' && selectedSong?.fileName) {
+      formData.append('fileName', selectedSong.fileName);
+    }
 
     try {
-      // Access Token 가져오기
-      const tokenResponse = await fetch(getApiUrl('/api/auth/get-access-token'));
-      if (!tokenResponse.ok) {
-        throw new Error('Failed to get access token');
-      }
-      const { accessToken } = await tokenResponse.json();
-
-      // 파일 메타데이터 설정
-      const metadata = {
-        name: `${formDataState.chapter}_${type}_${file.name}`,
-        parents: [formDataState.chapter] // 챕터 ID를 부모 폴더로 사용
-      };
-
-      // multipart 요청 생성
-      const boundary = '-------314159265358979323846';
-      const delimiter = "\r\n--" + boundary + "\r\n";
-      const close_delim = "\r\n--" + boundary + "--";
-
-      const metadataPart = 
-        delimiter +
-        'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
-        JSON.stringify(metadata);
-
-      const fileContent = await file.arrayBuffer();
-      const filePart = 
-        delimiter +
-        `Content-Type: ${file.type || 'application/octet-stream'}\r\n` +
-        'Content-Transfer-Encoding: base64\r\n\r\n' +
-        Buffer.from(fileContent).toString('base64');
-
-      const multipartRequestBody = metadataPart + filePart + close_delim;
-
-      // Google Drive API 직접 호출
-      const uploadResponse = await fetch('https://www.googleapis.com/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink', {
+      const response = await fetch(getApiUrl('/api/upload'), {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': `multipart/related; boundary=${boundary}`,
-          'Content-Length': multipartRequestBody.length.toString()
-        },
-        body: multipartRequestBody
+        body: formData
       });
 
-      if (!uploadResponse.ok) {
-        const errorData = await uploadResponse.json();
-        console.error('Google Drive API error:', errorData);
-        throw new Error(`Failed to upload file to Google Drive: ${errorData.error?.message || 'Unknown error'}`);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || `Failed to upload ${type} file`);
       }
 
-      const data = await uploadResponse.json();
-      
-      // 파일 권한 설정 (공개)
-      await fetch(`https://www.googleapis.com/drive/v3/files/${data.id}/permissions`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          role: 'reader',
-          type: 'anyone'
-        })
-      });
-
-      return {
-        fileId: data.id,
-        fileUrl: data.webViewLink,
-        fileName: data.name
-      };
+      return await response.json();
     } catch (error) {
       console.error(`Error uploading ${type} file:`, error);
-      toast.error(`${type === 'audio' ? '오디오' : '이미지'} 파일 업로드 중 오류가 발생했습니다.`);
+      toast.error(`${type} 파일 업로드에 실패했습니다.`);
       return null;
     }
   };
 
-  // 곡 생성
-  const handleCreate = async (e: React.FormEvent) => {
+  // 폼 제출 핸들러
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formDataState.title || !formDataState.chapter) return;
+    if (!formDataState.title || !formDataState.chapterId) {
+      toast.error('제목과 챕터는 필수 입력 항목입니다.');
+      return;
+    }
 
-    setIsLoading(true);
+    if (modalMode === 'add') {
+      handleCreate();
+    } else if (selectedSong?.id) {
+      handleUpdate(selectedSong.id);
+    } else {
+      toast.error('선택된 곡이 없습니다.');
+    }
+  };
+
+  // 선택된 챕터에 따라 아티스트 이름 생성
+  const getArtistNameFromChapter = (chapterId: string | number) => {
+    const chapterIdNum = typeof chapterId === 'string' ? parseInt(chapterId) : chapterId;
+    const chapter = chapters.find(ch => ch.id === chapterIdNum);
+    if (!chapter) return '';
+    const chapterNumber = chapter.name.replace(/[^0-9]/g, '');
+    return `계시록 ${chapterNumber}장`;
+  };
+
+  // 곡 생성
+  const handleCreate = async () => {
     try {
-      let audioUploadResult = null;
-      let imageUploadResult = null;
+      setIsLoading(true); 
 
+      if (!formDataState.chapterId || !formDataState.title || !formDataState.lyrics) {
+        toast.error('필수 정보를 모두 입력해주세요.');
+        return;
+      }
+
+      // 챕터 기반으로 아티스트 이름 설정
+      const artistName = getArtistNameFromChapter(formDataState.chapterId);
+
+      // 오디오 파일 업로드
+      let audioUploadResult = null;
+      let audioDuration = 0;
+      
       if (formDataState.audioFile) {
-        audioUploadResult = await handleFileUpload(formDataState.audioFile, 'audio');
+        // 오디오 파일의 duration 가져오기
+        try {
+          audioDuration = await getAudioDuration(formDataState.audioFile);
+        } catch (error) {
+          console.error('Error getting audio duration:', error);
+        }
+
+        audioUploadResult = await onFileUpload(formDataState.audioFile, 'audio');
         if (!audioUploadResult) return;
       }
 
+      // 이미지 파일 업로드
+      let imageUploadResult = null;
       if (formDataState.imageFile) {
-        imageUploadResult = await handleFileUpload(formDataState.imageFile, 'image');
+        imageUploadResult = await onFileUpload(formDataState.imageFile, 'image');
         if (!imageUploadResult) return;
       }
 
-      const form = new FormData();
-      form.append('title', formDataState.title);
-      form.append('artist', formDataState.artist);
-      form.append('chapter', formDataState.chapter);
-      form.append('genreId', formDataState.genreId || '');
-      form.append('lyrics', formDataState.lyrics || '');
-      form.append('isNew', String(formDataState.isNew));
+      // 곡 생성 요청
+      const formData = new FormData();
+      formData.append('title', formDataState.title);
+      formData.append('artist', artistName);
+      formData.append('chapterId', formDataState.chapterId.toString());
+      formData.append('genreId', formDataState.genreId || 'hiphop');
+      formData.append('lyrics', formDataState.lyrics || '');
+      formData.append('isNew', formDataState.isNew.toString());
 
       if (audioUploadResult) {
-        form.append('driveFileId', audioUploadResult.fileId);
-        form.append('fileUrl', audioUploadResult.fileUrl);
+        formData.append('driveFileId', audioUploadResult.fileId);
+        formData.append('fileUrl', audioUploadResult.fileUrl);
+        const minutes = Math.floor(audioDuration / 60);
+        const seconds = Math.floor(audioDuration % 60);
+        formData.append('duration', `${minutes}:${seconds.toString().padStart(2, '0')}`);
       }
 
       if (imageUploadResult) {
-        form.append('imageId', imageUploadResult.fileId);
-        form.append('imageUrl', imageUploadResult.fileUrl);
+        formData.append('imageId', imageUploadResult.fileId);
+        formData.append('imageUrl', imageUploadResult.fileUrl);
       }
-
+      
       const response = await fetch(getApiUrl('/api/songs'), {
         method: 'POST',
-        body: form,
+        body: formData,
       });
+
+      const responseText = await response.text();
+      console.log('API Response text:', responseText);
 
       if (!response.ok) {
-        throw new Error('Failed to create song');
+        let error;
+        try {
+          error = JSON.parse(responseText);
+        } catch {
+          error = { message: responseText };
+        }
+        console.error('Server error:', error);
+        throw new Error(error.message || 'Failed to create song');
       }
 
-      toast.success('곡이 성공적으로 추가되었습니다.');
+      const result = JSON.parse(responseText);
+      console.log('Song created:', result);
+
+      toast.success('노래가 성공적으로 생성되었습니다. 콘솔을 확인한 후 목록으로 이동 버튼을 클릭하세요.');
       setIsLoading(false);
-      setShowModal(false);
-      setFormDataState({
-        title: '',
-        artist: 'Various Artists',
-        chapter: '',
-        chapterId: 0,
-        genreId: '',
-        audioFile: null,
-        imageFile: null,
-        lyrics: '',
-        lyricsFile: null,
-        isNew: false,
-        driveFileId: '',
-        fileUrl: '',
-        duration: '',
-        imageId: '',
-        imageUrl: ''
-      });
-      fetchSongs();
     } catch (error) {
       console.error('Error creating song:', error);
-      toast.error('곡 생성 중 오류가 발생했습니다.');
-    } finally {
+      toast.error('노래 생성 중 오류가 발생했습니다.');
       setIsLoading(false);
     }
   };
 
   // 곡 수정
-  const handleUpdate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedSong || !formDataState.title || !formDataState.chapter) return;
+  const handleUpdate = async (id: number) => {
+    if (!selectedSong) return;
 
-    setIsLoading(true);
     try {
-      // 기존 파일 정보
-      const currentDriveFileId = selectedSong.driveFileId;
-      const currentImageId = selectedSong.imageId;
+      setIsLoading(true);
 
-      // 새 파일이 업로드된 경우 기존 파일 삭제
-      if (formDataState.driveFileId && formDataState.driveFileId !== currentDriveFileId) {
-        if (currentDriveFileId) {
-          await fetch(getApiUrl(`/api/drive/delete/${currentDriveFileId}`), {
-            method: 'DELETE'
-          });
+      // 챕터 기반으로 아티스트 이름 설정
+      const artistName = getArtistNameFromChapter(formDataState.chapterId);
+
+      let newImageId = selectedSong.imageId;
+      let newImageUrl = selectedSong.imageUrl;
+
+      // 새 이미지가 선택된 경우
+      if (formDataState.imageFile) {
+        try {
+          const imageUploadResult = await onFileUpload(formDataState.imageFile, 'image');
+          if (!imageUploadResult) return;
+
+          newImageId = imageUploadResult.fileId;
+          newImageUrl = imageUploadResult.fileUrl;
+
+          // 기존 이미지 삭제
+          if (selectedSong.imageId) {
+            const imageDeleted = await deleteFile(selectedSong.imageId);
+            if (!imageDeleted) {
+              console.error('Failed to delete old image file');
+            }
+          }
+        } catch (error) {
+          console.error('Error uploading new image:', error);
+          toast.error('이미지 업로드에 실패했습니다.');
+          return;
         }
       }
 
-      if (formDataState.imageId && formDataState.imageId !== currentImageId) {
-        if (currentImageId) {
-          await fetch(getApiUrl(`/api/drive/delete/${currentImageId}`), {
-            method: 'DELETE'
-          });
+      // 오디오 파일 업로드
+      let newAudioFileId = selectedSong.driveFileId;
+      let newAudioFileUrl = selectedSong.fileUrl;
+      if (formDataState.audioFile) {
+        try {
+          const audioUploadResult = await onFileUpload(formDataState.audioFile, 'audio');
+          if (!audioUploadResult) return;
+
+          newAudioFileId = audioUploadResult.fileId;
+          newAudioFileUrl = audioUploadResult.fileUrl;
+
+          // 기존 오디오 파일 삭제
+          if (selectedSong.driveFileId) {
+            const audioDeleted = await deleteFile(selectedSong.driveFileId);
+            if (!audioDeleted) {
+              console.error('Failed to delete old audio file');
+            }
+          }
+        } catch (error) {
+          console.error('Error uploading new audio file:', error);
+          toast.error('오디오 파일 업로드에 실패했습니다.');
+          return;
         }
       }
 
-      const response = await fetch(getApiUrl(`/api/songs/${selectedSong.id}`), {
+      const formData = new FormData();
+      formData.append('title', formDataState.title);
+      formData.append('artist', artistName);
+      formData.append('chapterId', formDataState.chapterId.toString());
+      formData.append('genreId', formDataState.genreId || 'hiphop');
+      formData.append('lyrics', formDataState.lyrics || '');
+      formData.append('isNew', formDataState.isNew.toString());
+      formData.append('driveFileId', newAudioFileId || '');
+      formData.append('fileUrl', newAudioFileUrl || '');
+      
+      // duration 형식 수정
+      if (formDataState.duration) {
+        const [minutes, seconds] = formDataState.duration.split(':').map(Number);
+        formData.append('duration', `${minutes}:${seconds.toString().padStart(2, '0')}`);
+      } else {
+        formData.append('duration', '');
+      }
+      
+      formData.append('imageId', newImageId || '');
+      formData.append('imageUrl', newImageUrl || '');
+
+      const response = await fetch(`/api/songs/${id}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          title: formDataState.title,
-          artist: formDataState.artist,
-          chapterId: parseInt(formDataState.chapter),
-          genreId: formDataState.genreId,
-          lyrics: formDataState.lyrics,
-          isNew: formDataState.isNew,
-          driveFileId: formDataState.driveFileId || currentDriveFileId,
-          fileUrl: formDataState.fileUrl,
-          duration: formDataState.duration,
-          imageId: formDataState.imageId || currentImageId,
-          imageUrl: formDataState.imageUrl
-        }),
+        body: formData
       });
 
       if (!response.ok) {
-        throw new Error('Failed to update song');
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to update song');
       }
 
-      // 성공적으로 업데이트된 경우
-      toast.success('곡이 성공적으로 수정되었습니다.');
-      setIsLoading(false);
+      const updatedSong = await response.json();
+      setSongs(songs.map(song => song.id === id ? updatedSong : song));
       setShowModal(false);
-      setIsEditing(false);
-      setSelectedSong(null);
-      fetchSongs(); // 목록 새로고침
+      setFormDataState(initialFormData);
+      toast.success('곡이 수정되었습니다.');
     } catch (error) {
       console.error('Error updating song:', error);
-      toast.error('곡 수정 중 오류가 발생했습니다.');
+      toast.error(error instanceof Error ? error.message : '곡 수정에 실패했습니다.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // 곡 삭제
-  const handleDelete = async (id: number) => {
-    if (!window.confirm('정말로 이 곡을 삭제하시겠습니까?')) {
-      return;
+  // 이미지 파일 변경 처리
+  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setFormDataState(prev => ({
+      ...prev,
+      imageFile: file
+    }));
+  };
+
+  // 파일 삭제 함수
+  const deleteFile = async (fileId: string) => {
+    try {
+      const response = await fetch(getApiUrl('/api/drive/delete'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ fileId }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete file');
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error deleting file:', error);
+      return false;
     }
+  };
+
+  // 곡 삭제
+  const handleDelete = async (song: SongWithChapter) => {
+    if (!confirm('정말 삭제하시겠습니까?')) return;
 
     try {
-      const response = await fetch(getApiUrl(`/api/songs/${id}`), {
+      setIsLoading(true);
+
+      // 먼저 DB에서 곡 데이터 삭제
+      const response = await fetch(getApiUrl(`/api/songs/${song.id}`), {
         method: 'DELETE',
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to delete song');
+        throw new Error('Failed to delete song');
       }
 
-      // 성공적으로 삭제되면 목록에서도 제거
-      setSongs(prev => prev.filter(song => song.id !== id));
-      router.refresh();
+      // DB 삭제 성공 후 파일 삭제 시도
+      if (song.imageId) {
+        const imageDeleted = await deleteFile(song.imageId);
+        if (!imageDeleted) {
+          console.error('Failed to delete image file');
+        }
+      }
+
+      if (song.driveFileId) {
+        const audioDeleted = await deleteFile(song.driveFileId);
+        if (!audioDeleted) {
+          console.error('Failed to delete audio file');
+        }
+      }
+
+      toast.success('곡이 삭제되었습니다.');
+      fetchSongs();
     } catch (error) {
       console.error('Error deleting song:', error);
-      alert('곡을 삭제하는 중 오류가 발생했습니다.');
+      toast.error('곡 삭제에 실패했습니다.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -423,17 +574,15 @@ export default function AdminPage() {
     const newFormData: FormData = {
       title: song.title,
       artist: song.artist || 'Various Artists',
-      chapter: String(song.chapterId),
-      chapterId: song.chapterId,
+      chapterId: song.chapterId.toString(), 
       genreId: song.genreId || '',
       audioFile: null,
       imageFile: null,
       lyrics: song.lyrics || '',
-      lyricsFile: null,
       isNew: song.isNew || false,
+      duration: song.duration || '',
       driveFileId: song.driveFileId || '',
       fileUrl: song.fileUrl || '',
-      duration: song.duration || '',
       imageId: song.imageId || '',
       imageUrl: song.imageUrl || ''
     };
@@ -446,7 +595,7 @@ export default function AdminPage() {
       if (song.popularSong) {
         // 인기곡에서 제거
         await fetch(getApiUrl(`/api/popular-songs?id=${song.popularSong.id}`), {
-          method: 'DELETE',
+          method: 'DELETE'
         });
       } else {
         // 인기곡으로 추가
@@ -564,83 +713,61 @@ export default function AdminPage() {
   const handleCancelEdit = () => {
     setIsEditing(false);
     setSelectedSong(null);
-    setFormDataState({
-      title: '',
-      artist: 'Various Artists',
-      chapter: '',
-      chapterId: 0,
-      genreId: '',
-      audioFile: null,
-      imageFile: null,
-      lyrics: '',
-      lyricsFile: null,
-      isNew: false,
-      driveFileId: '',
-      fileUrl: '',
-      duration: '',
-      imageId: '',
-      imageUrl: ''
-    });
+    setFormDataState(initialFormData);
   };
 
   // 장르 생성
-  const handleCreateGenre = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!genreFormData.id || !genreFormData.name) return;
-
-    setIsLoading(true);
+  const handleCreateGenre = async () => {
     try {
-      const response = await fetch(getApiUrl('/api/genres'), {
+      const response: Response = await fetch('/api/genres', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(genreFormData)
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newGenre),
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error);
+        throw new Error('Failed to create genre');
       }
 
-      const newGenre = await response.json();
-      setGenres(prev => [...prev, newGenre]);
-      setGenreFormData({ id: '', name: '' });
+      const createdGenre: PrismaGenre = await response.json();
+      setGenres([...genres, createdGenre]);
+      setNewGenre({ id: '', name: '' });
+      toast.success('장르가 생성되었습니다.');
     } catch (error) {
       console.error('Error creating genre:', error);
-      alert(error instanceof Error ? error.message : '장르 생성에 실패했습니다.');
-    } finally {
-      setIsLoading(false);
+      toast.error('장르 생성에 실패했습니다.');
     }
   };
 
-  // 장르 수정
-  const handleUpdateGenre = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!genreFormData.id || !genreFormData.name) return;
+  // 장르 추가
+  const handleAddGenre = async () => {
+    if (!newGenre.id || !newGenre.name) {
+      toast.error('장르 ID와 이름을 모두 입력해주세요.');
+      return;
+    }
 
-    setIsLoading(true);
     try {
-      const response = await fetch(getApiUrl('/api/genres'), {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(genreFormData)
+      const response: Response = await fetch('/api/genres', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newGenre),
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error);
+        throw new Error('Failed to add genre');
       }
 
-      const updatedGenre = await response.json();
-      setGenres(prev =>
-        prev.map(genre => (genre.id === updatedGenre.id ? updatedGenre : genre))
-      );
-      setGenreFormData({ id: '', name: '' });
-      setEditingGenreId(null);
+      const data: PrismaGenre = await response.json();
+      setGenres([...genres, data]);
+      setNewGenre({ id: '', name: '' });
+      toast.success('장르가 추가되었습니다.');
     } catch (error) {
-      console.error('Error updating genre:', error);
-      alert(error instanceof Error ? error.message : '장르 수정에 실패했습니다.');
-    } finally {
-      setIsLoading(false);
+      console.error('Error adding genre:', error);
+      toast.error('장르 추가에 실패했습니다.');
     }
   };
 
@@ -649,7 +776,7 @@ export default function AdminPage() {
     if (!confirm('정말 이 장르를 삭제하시겠습니까?')) return;
 
     try {
-      const response = await fetch(getApiUrl(`/api/genres?id=${id}`), {
+      const response = await fetch(`/api/genres/${id}`, {
         method: 'DELETE'
       });
 
@@ -659,22 +786,11 @@ export default function AdminPage() {
       }
 
       setGenres(prev => prev.filter(genre => genre.id !== id));
+      toast.success('장르가 삭제되었습니다.');
     } catch (error) {
       console.error('Error deleting genre:', error);
-      alert(error instanceof Error ? error.message : '장르 삭제에 실패했습니다.');
+      toast.error(error instanceof Error ? error.message : '장르 삭제에 실패했습니다.');
     }
-  };
-
-  // 장르 수정 시작
-  const handleEditGenre = (genre: Genre) => {
-    setGenreFormData(genre);
-    setEditingGenreId(genre.id);
-  };
-
-  // 장르 수정 취소
-  const handleCancelEditGenre = () => {
-    setGenreFormData({ id: '', name: '' });
-    setEditingGenreId(null);
   };
 
   // AI 가사 생성
@@ -724,12 +840,11 @@ export default function AdminPage() {
   // 챕터 선택 시 아티스트도 자동으로 설정
   const handleChapterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedChapterId = e.target.value;
-    const selectedChapter = chapters.find(ch => ch.id === selectedChapterId);
+    const selectedChapter = chapters.find(ch => ch.id === parseInt(selectedChapterId));
     
     setFormDataState(prev => ({
       ...prev,
-      chapter: selectedChapterId,
-      chapterId: parseInt(selectedChapterId)
+      chapterId: selectedChapterId
     }));
   };
 
@@ -778,6 +893,18 @@ export default function AdminPage() {
       console.error('Error saving lyrics:', error);
       toast.error('가사 저장에 실패했습니다.');
     }
+  };
+
+  // 장르 뱃지 컴포넌트
+  const GenreBadge = ({ genre }: { genre: PrismaGenre | null }) => {
+    if (!genre) return null;
+    
+    const colorClass = getGenreColor(genre.id);
+    return (
+      <span className={`px-2 py-1 rounded-full text-xs font-medium ${colorClass}`}>
+        {genre.name}
+      </span>
+    );
   };
 
   return (
@@ -883,23 +1010,7 @@ export default function AdminPage() {
                   onClick={() => {
                     setModalMode('add');
                     setShowModal(true);
-                    setFormDataState({
-                      title: '',
-                      artist: 'Various Artists',
-                      chapter: '',
-                      chapterId: 0,
-                      genreId: '',
-                      audioFile: null,
-                      imageFile: null,
-                      lyrics: '',
-                      lyricsFile: null,
-                      isNew: false,
-                      driveFileId: '',
-                      fileUrl: '',
-                      duration: '',
-                      imageId: '',
-                      imageUrl: ''
-                    });
+                    setFormDataState(initialFormData);
                   }}
                   className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors duration-200 flex items-center space-x-2"
                 >
@@ -924,13 +1035,17 @@ export default function AdminPage() {
                       >
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center space-x-3 mb-2">
-                            <h3 className="text-lg font-semibold text-gray-900">
+                            <h3 className={`text-lg font-semibold text-gray-900 ${song.title.length > 30 ? 'text-sm' : ''}`}>
                               {song.title}
                             </h3>
-                            {song.genreId && (
-                              <span className="px-3 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">
-                                {genres.find(g => g.id === song.genreId)?.name || '장르 없음'}
-                              </span>
+                          </div>
+                          <div className="flex items-center space-x-2 text-sm text-gray-500 whitespace-nowrap overflow-x-auto">
+                            <span>{song.artist}</span>
+                            {song.genre && (
+                              <>
+                                <span>•</span>
+                                <GenreBadge genre={song.genre} />
+                              </>
                             )}
                           </div>
                         </div>
@@ -956,7 +1071,7 @@ export default function AdminPage() {
                             <FiClock className="w-5 h-5" />
                           </button>
                           <button
-                            onClick={() => handleDelete(song.id)}
+                            onClick={() => handleDelete(song)}
                             className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
                             title="삭제"
                           >
@@ -988,23 +1103,8 @@ export default function AdminPage() {
             
             {/* 장르 추가/수정 폼 */}
             <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-              <form onSubmit={editingGenreId ? handleUpdateGenre : handleCreateGenre}>
+              <form onSubmit={handleCreateGenre}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label htmlFor="genreId" className="block text-sm font-medium text-gray-700">
-                      ID (영문)
-                    </label>
-                    <input
-                      type="text"
-                      id="genreId"
-                      value={genreFormData.id}
-                      onChange={(e) => setGenreFormData({ ...genreFormData, id: e.target.value.toLowerCase() })}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-gray-900"
-                      placeholder="k-pop"
-                      required
-                      disabled={!!editingGenreId}
-                    />
-                  </div>
                   <div>
                     <label htmlFor="genreName" className="block text-sm font-medium text-gray-700">
                       이름 (한글)
@@ -1012,10 +1112,24 @@ export default function AdminPage() {
                     <input
                       type="text"
                       id="genreName"
-                      value={genreFormData.name}
-                      onChange={(e) => setGenreFormData({ ...genreFormData, name: e.target.value })}
+                      value={newGenre.name}
+                      onChange={(e) => setNewGenre({ ...newGenre, name: e.target.value })}
                       className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-gray-900"
                       placeholder="케이팝"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="genreId" className="block text-sm font-medium text-gray-700">
+                      ID
+                    </label>
+                    <input
+                      type="text"
+                      id="genreId"
+                      value={newGenre.id}
+                      onChange={(e) => setNewGenre({ ...newGenre, id: e.target.value })}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-gray-900"
+                      placeholder="k-pop"
                       required
                     />
                   </div>
@@ -1026,17 +1140,8 @@ export default function AdminPage() {
                     disabled={isLoading}
                     className="inline-flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400"
                   >
-                    {isLoading ? '처리 중...' : editingGenreId ? '수정' : '추가'}
+                    {isLoading ? '처리 중...' : '추가'}
                   </button>
-                  {editingGenreId && (
-                    <button
-                      type="button"
-                      onClick={handleCancelEditGenre}
-                      className="inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-                    >
-                      취소
-                    </button>
-                  )}
                 </div>
               </form>
             </div>
@@ -1047,9 +1152,6 @@ export default function AdminPage() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      ID
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       이름
                     </th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -1059,23 +1161,14 @@ export default function AdminPage() {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {genres.map((genre) => (
-                    <tr key={genre.id} className="hover:bg-gray-50">
+                    <tr key={genre.name} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {genre.id}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {genre.name}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <button
-                          onClick={() => handleEditGenre(genre)}
-                          className="text-indigo-600 hover:text-indigo-900 mx-2"
-                        >
-                          수정
-                        </button>
-                        <button
                           onClick={() => handleDeleteGenre(genre.id)}
-                          className="text-red-600 hover:text-red-900 mx-2"
+                          className="text-red-600 hover:text-red-900"
                         >
                           삭제
                         </button>
@@ -1124,7 +1217,7 @@ export default function AdminPage() {
                   >
                     <option value="">장르 선택</option>
                     {genres.map((genre) => (
-                      <option key={genre.id} value={genre.id}>
+                      <option key={genre.name} value={genre.name}>
                         {genre.name}
                       </option>
                     ))}
@@ -1179,7 +1272,7 @@ export default function AdminPage() {
 
         {showModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="bg-white p-6 rounded-lg w-full max-w-2xl max-h-[90vh] overflow-auto">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-bold">
                   {modalMode === 'add' ? '곡 추가' : '곡 수정'}
@@ -1190,7 +1283,7 @@ export default function AdminPage() {
                     setIsEditing(false);
                     setSelectedSong(null);
                   }}
-                  className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors duration-200"
+                  className="text-gray-500 hover:text-gray-700"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1198,151 +1291,155 @@ export default function AdminPage() {
                 </button>
               </div>
 
-              <form onSubmit={modalMode === 'add' ? handleCreate : handleUpdate} className="space-y-4">
-                <div>
-                  <label htmlFor="title" className="block text-sm font-medium text-gray-700">
-                    제목
-                  </label>
-                  <input
-                    type="text"
-                    id="title"
-                    value={formDataState.title}
-                    onChange={(e) => setFormDataState({ ...formDataState, title: e.target.value })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-black"
-                    required
-                  />
-                </div>
+              <form onSubmit={handleSubmit} className="mt-4">
+                <div className="space-y-4">
+                  <div>
+                    <label htmlFor="title" className="block text-sm font-medium text-gray-700">
+                      제목
+                    </label>
+                    <input
+                      type="text"
+                      id="title"
+                      value={formDataState.title}
+                      onChange={(e) => setFormDataState({ ...formDataState, title: e.target.value })}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-black"
+                      required
+                    />
+                  </div>
 
-                <div>
-                  <label htmlFor="chapter" className="block text-sm font-medium text-gray-700">
-                    챕터
-                  </label>
-                  <select
-                    id="chapter"
-                    value={formDataState.chapter}
-                    onChange={handleChapterChange}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-black"
-                    required
-                  >
-                    <option value="">챕터를 선택하세요</option>
-                    {chapters.map((chapter) => (
-                      <option key={chapter.id} value={chapter.id}>
-                        {chapter.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                  <div>
+                    <label htmlFor="chapter" className="block text-sm font-medium text-gray-700">
+                      챕터
+                    </label>
+                    <select
+                      id="chapter"
+                      value={formDataState.chapterId}
+                      onChange={handleChapterChange}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-black"
+                      required
+                    >
+                      <option value="">챕터를 선택하세요</option>
+                      {chapters.map((chapter) => (
+                        <option key={chapter.id} value={chapter.id}>
+                          {chapter.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-                <div>
-                  <label htmlFor="genre" className="block text-sm font-medium text-gray-700">
-                    장르
-                  </label>
-                  <select
-                    id="genre"
-                    value={formDataState.genreId}
-                    onChange={(e) => setFormDataState({ ...formDataState, genreId: e.target.value })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-black"
-                  >
-                    <option value="">장르 선택</option>
-                    {genres.map((genre) => (
-                      <option key={genre.id} value={genre.id}>
-                        {genre.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">장르</label>
+                    <select
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-black"
+                      value={formDataState.genreId || 'hiphop'}
+                      onChange={(e) =>
+                        setFormDataState((prev) => ({ ...prev, genreId: e.target.value }))
+                      }
+                    >
+                      {genres.map((genre) => (
+                        <option key={genre.id} value={genre.id} className="text-black">
+                          {genre.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-                <div className="flex items-center mb-4">
-                  <input
-                    type="checkbox"
-                    id="isNew"
-                    checked={formDataState.isNew}
-                    onChange={(e) => setFormDataState({ ...formDataState, isNew: e.target.checked })}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                  <label htmlFor="isNew" className="ml-2 block text-sm text-gray-900">
-                    신규곡
-                  </label>
-                </div>
+                  <div className="flex items-center mb-4">
+                    <input
+                      type="checkbox"
+                      id="isNew"
+                      checked={formDataState.isNew}
+                      onChange={(e) => setFormDataState({ ...formDataState, isNew: e.target.checked })}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <label htmlFor="isNew" className="ml-2 block text-sm text-gray-900">
+                      신규곡
+                    </label>
+                  </div>
 
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    오디오 파일
-                  </label>
-                  <input
-                    type="file"
-                    accept="audio/*"
-                    onChange={(e) => handleFileChange(e, 'audio')}
-                    className="block w-full text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                  />
-                  {(formDataState.fileUrl || selectedSong?.fileUrl) && (
-                    <p className="mt-2 text-sm text-gray-600">
-                      현재 파일: {formDataState.fileUrl || selectedSong?.fileUrl}
-                    </p>
-                  )}
-                </div>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700">
+                      오디오 파일 {modalMode === 'edit' && '(수정 불가)'}
+                    </label>
+                    <input
+                      type="file"
+                      accept="audio/*"
+                      onChange={(e) => handleFileChange(e, 'audio')}
+                      className={`block w-full text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold ${
+                        modalMode === 'edit' 
+                        ? 'file:bg-gray-100 file:text-gray-400 hover:file:bg-gray-100 cursor-not-allowed opacity-60' 
+                        : 'file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100'
+                      }`}
+                      disabled={modalMode === 'edit'}
+                    />
+                    {modalMode === 'edit' && selectedSong?.fileUrl && (
+                      <p className="mt-2 text-sm text-gray-600">
+                        현재 파일: {selectedSong.fileUrl}
+                      </p>
+                    )}
+                  </div>
 
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    이미지 파일
-                  </label>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => handleFileChange(e, 'image')}
-                    className="block w-full text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                  />
-                  {(formDataState.imageUrl || selectedSong?.imageUrl) && (
-                    <p className="mt-2 text-sm text-gray-600">
-                      현재 파일: {formDataState.imageUrl || selectedSong?.imageUrl}
-                    </p>
-                  )}
-                </div>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700">
+                      이미지 파일
+                    </label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageFileChange}
+                      className="block w-full text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                    />
+                    {(formDataState.imageUrl || (modalMode === 'edit' && selectedSong?.imageUrl)) && (
+                      <p className="mt-2 text-sm text-gray-600">
+                        현재 이미지: {formDataState.imageUrl || selectedSong?.imageUrl}
+                      </p>
+                    )}
+                  </div>
 
-                <div>
-                  <label htmlFor="lyrics" className="block text-sm font-medium text-gray-700">
-                    가사
-                  </label>
-                  <textarea
-                    id="lyrics"
-                    value={formDataState.lyrics}
-                    onChange={(e) => setFormDataState({ ...formDataState, lyrics: e.target.value })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-black"
-                    rows={5}
-                  />
-                </div>
+                  <div>
+                    <label htmlFor="lyrics" className="block text-sm font-medium text-gray-700">
+                      가사
+                    </label>
+                    <textarea
+                      id="lyrics"
+                      value={formDataState.lyrics}
+                      onChange={(e) => setFormDataState({ ...formDataState, lyrics: e.target.value })}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-black"
+                      rows={5}
+                    />
+                  </div>
 
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    가사 파일 (txt)
-                  </label>
-                  <input
-                    type="file"
-                    accept=".txt"
-                    onChange={(e) => handleFileChange(e, 'lyrics')}
-                    className="block w-full text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                  />
-                </div>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700">
+                      가사 파일 (txt)
+                    </label>
+                    <input
+                      type="file"
+                      accept=".txt"
+                      onChange={(e) => handleFileChange(e, 'lyrics')}
+                      className="block w-full text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                    />
+                  </div>
 
-                <div className="flex justify-end space-x-3 mt-6">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowModal(false);
-                      setIsEditing(false);
-                      setSelectedSong(null);
-                    }}
-                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-                  >
-                    취소
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
-                    disabled={isLoading}
-                  >
-                    {isLoading ? '처리중...' : modalMode === 'add' ? '추가' : '수정'}
-                  </button>
+                  <div className="mt-4 flex justify-between">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowModal(false);
+                        setFormDataState(initialFormData);
+                      }}
+                      className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+                    >
+                      목록으로 이동
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isLoading}
+                      className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400"
+                    >
+                      {isLoading ? '처리 중...' : '저장'}
+                    </button>
+                  </div>
                 </div>
               </form>
             </div>
@@ -1358,7 +1455,9 @@ export default function AdminPage() {
                   onClick={() => setShowLyricsEditorV2(false)}
                   className="text-gray-500 hover:text-gray-700"
                 >
-               
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
                 </button>
               </div>
               <LyricsTimestampEditorV2
@@ -1396,7 +1495,9 @@ export default function AdminPage() {
                               {(song.popularSong?.order || 0) + 1}
                             </span>
                             <div>
-                              <h3 className="font-medium text-gray-900">{song.title}</h3>
+                              <h3 className={`font-medium text-gray-900 ${song.title.length > 30 ? 'text-sm' : ''}`}>
+                                {song.title}
+                              </h3>
                             </div>
                           </div>
                         </div>
@@ -1477,7 +1578,9 @@ export default function AdminPage() {
                               NEW
                             </span>
                             <div>
-                              <h3 className="font-medium text-gray-900">{song.title}</h3>
+                              <h3 className={`font-medium text-gray-900 ${song.title.length > 30 ? 'text-sm' : ''}`}>
+                                {song.title}
+                              </h3>
                               <div className="flex items-center space-x-2 text-sm text-gray-500">
                                 <span>{song.artist}</span>
                                 <span>•</span>

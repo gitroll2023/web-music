@@ -40,8 +40,8 @@ async function getGoogleDriveConfig() {
   };
 }
 
-// DELETE /api/google-drive/[fileId]
-export async function DELETE(
+// GET /api/google-drive/[fileId]
+export async function GET(
   request: Request,
   { params }: { params: { fileId: string } }
 ) {
@@ -54,14 +54,48 @@ export async function DELETE(
     );
     auth.setCredentials({ refresh_token: refreshToken });
 
-    const fileId = params.fileId;
+    const response = await drive.files.get({
+      fileId: params.fileId,
+      fields: 'id, name, webViewLink',
+      auth
+    });
+
+    return NextResponse.json(response.data);
+  } catch (error: any) {
+    console.error('Error getting file:', error);
+    return NextResponse.json(
+      { error: error.message || 'Failed to get file' },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE /api/google-drive/[fileId]
+export async function DELETE(
+  request: Request,
+  { params }: { params: { fileId: string } }
+) {
+  try {
+    const auth = new google.auth.GoogleAuth({
+      credentials: {
+        client_email: process.env.GOOGLE_CLIENT_EMAIL,
+        private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+      },
+      scopes: ['https://www.googleapis.com/auth/drive.file'],
+    });
+
+    const { fileId } = params;
+
+    if (!fileId) {
+      return NextResponse.json({ error: 'File ID is required' }, { status: 400 });
+    }
 
     await drive.files.delete({
-      fileId: fileId,
+      fileId,
       auth,
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ message: 'File deleted successfully' });
   } catch (error: any) {
     console.error('Error deleting file:', error);
     // 파일이 이미 없는 경우는 성공으로 처리

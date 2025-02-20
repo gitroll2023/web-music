@@ -29,7 +29,7 @@ module.exports = {
       animation: {
         'slideWidth': 'slideWidth 2s ease-in-out infinite alternate',
         'marquee': 'marquee 15s linear infinite',
-        'fade-in': 'fadeIn 1s ease-in forwards',
+        'fade-in': 'fade-in 0.5s ease-out',
         'fade-in-delay': 'fadeIn 1s ease-in 0.5s forwards',
         'fade-in-once': 'fadeIn 1s ease-in forwards',
         'fade-in-delay-once': 'fadeIn 1s ease-in 0.5s forwards',
@@ -68,6 +68,10 @@ module.exports = {
         'pulse-slow': {
           '0%, 100%': { opacity: '0.1' },
           '50%': { opacity: '0.3' }
+        },
+        'fade-in': {
+          '0%': { opacity: '0', transform: 'translateY(-10px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' }
         }
       }
     },
