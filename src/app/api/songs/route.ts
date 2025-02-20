@@ -56,18 +56,8 @@ function normalizeGenreName(name: string): string {
 
 export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '10'); // 한 번에 가져오는 곡 수 줄임
-    const skip = (page - 1) * limit;
-
-    // 첫 페이지일 때는 전체 수를 가져오지 않음
-    const totalCount = page === 1 ? null : await prisma.song.count();
-
-    // 모든 필드를 가져오기
+    // 모든 곡을 한 번에 가져오기
     const songs = await prisma.song.findMany({
-      take: limit,
-      skip: skip,
       include: {
         chapter: true,
         genre: true,
@@ -80,15 +70,7 @@ export async function GET(request: Request) {
       }
     });
 
-    return NextResponse.json({
-      songs,
-      pagination: {
-        total: totalCount,
-        page,
-        limit,
-        totalPages: totalCount ? Math.ceil(totalCount / limit) : null
-      }
-    });
+    return NextResponse.json({ songs });
   } catch (error) {
     console.error('Error fetching songs:', error);
     return NextResponse.json(

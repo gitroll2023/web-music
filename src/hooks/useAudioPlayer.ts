@@ -11,6 +11,7 @@ interface AudioState {
 }
 
 export function useAudioPlayer(audioUrl: string | undefined) {
+  // 각 훅 인스턴스별로 고유한 오디오 객체 생성
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [audioState, setAudioState] = useState<AudioState>({
     currentTime: 0,
@@ -38,8 +39,13 @@ export function useAudioPlayer(audioUrl: string | undefined) {
 
     setAudioState(prev => ({ ...prev, isLoading: true, error: null }));
 
+    // 새로운 오디오 객체 생성 (각 사용자별로 독립적인 인스턴스)
     const audio = new Audio();
+    audio.preload = 'auto';  // 자동 프리로드 설정
     audioRef.current = audio;
+
+    // 오디오 URL 설정
+    audio.src = audioUrl;
 
     // 오디오 이벤트 리스너
     const handlers = {
@@ -49,34 +55,21 @@ export function useAudioPlayer(audioUrl: string | undefined) {
         isReady: true, 
         isLoading: false,
         error: null,
-      })),
-      loadedmetadata: () => setAudioState(prev => ({ 
-        ...prev, 
         duration: audio.duration 
       })),
-      timeupdate: () => setAudioState(prev => ({ 
-        ...prev, 
-        currentTime: audio.currentTime 
-      })),
-      ended: () => {
-        setAudioState(prev => ({ 
-          ...prev, 
-          isPlaying: false, 
-          currentTime: 0 
-        }));
-      },
+      play: () => setAudioState(prev => ({ ...prev, isPlaying: true })),
+      pause: () => setAudioState(prev => ({ ...prev, isPlaying: false })),
+      timeupdate: () => setAudioState(prev => ({ ...prev, currentTime: audio.currentTime })),
+      ended: () => setAudioState(prev => ({ ...prev, isPlaying: false, currentTime: 0 })),
       error: (e: ErrorEvent) => {
-        const errorMessage = getAudioErrorMessage(e);
+        console.error('Audio error:', e);
         setAudioState(prev => ({ 
           ...prev, 
-          error: errorMessage,
-          isLoading: false,
+          error: getAudioErrorMessage(e),
           isReady: false,
+          isLoading: false
         }));
-        console.error('Audio error:', errorMessage);
-      },
-      waiting: () => setAudioState(prev => ({ ...prev, isLoading: true })),
-      playing: () => setAudioState(prev => ({ ...prev, isLoading: false })),
+      }
     };
 
     // 이벤트 리스너 등록
@@ -84,30 +77,17 @@ export function useAudioPlayer(audioUrl: string | undefined) {
       audio.addEventListener(event, handler as EventListener);
     });
 
-    // 오디오 소스 설정
-    audio.src = audioUrl;
-    audio.load();
-
-    // Cleanup 함수
+    // 컴포넌트 언마운트 시 정리
     return () => {
-      Object.entries(handlers).forEach(([event, handler]) => {
-        audio.removeEventListener(event, handler as EventListener);
-      });
-      
-      audio.pause();
-      audio.src = '';
-      audio.load();
-      audioRef.current = null;
-      
-      setAudioState({
-        currentTime: 0,
-        duration: 0,
-        isPlaying: false,
-        isReady: false,
-        isLoading: false,
-        error: null,
-        volume: 1,
-      });
+      if (audioRef.current) {
+        audioRef.current.pause();
+        Object.entries(handlers).forEach(([event, handler]) => {
+          audioRef.current?.removeEventListener(event, handler as EventListener);
+        });
+        audioRef.current.src = '';
+        audioRef.current.load();
+        audioRef.current = null;
+      }
     };
   }, [audioUrl]);
 

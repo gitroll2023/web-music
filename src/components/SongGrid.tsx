@@ -327,6 +327,50 @@ const SongGrid = ({ songs, onSongSelect, onPlayAllAction, isDarkMode, toast, gen
     onGenreSelect
   }), [tempSearchQuery, handleSearchChange, handleSearch, isSearchMode, setIsSearchMode, handleReset, selectedGenre, handleGenreChange, isDarkMode, genres, selectedGenres, onGenreSelect]);
 
+  // 디버깅을 위한 로그
+  console.log('Original Songs:', songs);
+
+  // 노래 정렬 로직
+  const sortSongs = (songs: SongWithChapter[]) => {
+    const sorted = [...songs].sort((a, b) => {
+      // 챕터 ID로 정렬 (숫자로 변환하여 비교)
+      const chapterIdA = parseInt(String(a.chapterId));
+      const chapterIdB = parseInt(String(b.chapterId));
+      console.log(`Comparing chapters: ${a.chapterId}(${chapterIdA}) vs ${b.chapterId}(${chapterIdB})`);
+      if (chapterIdA !== chapterIdB) {
+        return chapterIdA - chapterIdB;
+      }
+      // 장르 ID로 정렬
+      const genreIdA = parseInt(String(a.genreId));
+      const genreIdB = parseInt(String(b.genreId));
+      if (genreIdA !== genreIdB) {
+        return genreIdA - genreIdB;
+      }
+      // 제목으로 정렬
+      return a.title.localeCompare(b.title);
+    });
+    console.log('Sorted Songs:', sorted);
+    return sorted;
+  };
+
+  const sortedSongs = useMemo(() => sortSongs(songs), [songs]);
+
+  // 챕터별로 노래 그룹화
+  const songsByChapter = sortedSongs.reduce((acc, song) => {
+    const chapter = song.chapterId;
+    if (!chapter) return acc;
+    
+    const chapterName = `계시록 ${song.chapterId}장`;
+    console.log(`Adding song to chapter: ${chapterName}`, song);
+    if (!acc[chapterName]) {
+      acc[chapterName] = [];
+    }
+    acc[chapterName].push(song);
+    return acc;
+  }, {} as Record<string, SongWithChapter[]>);
+
+  console.log('Songs by Chapter:', songsByChapter);
+
   // 필터링된 곡 목록
   const filteredSongs = useMemo(() => {
     let filtered = [...songs];
@@ -364,46 +408,6 @@ const SongGrid = ({ songs, onSongSelect, onPlayAllAction, isDarkMode, toast, gen
     return filtered;
   }, [songs, selectedChapter, searchQuery, selectedGenres, showOnlyNew, showOnlyWithLyrics]);
 
-  // 노래 정렬 로직
-  const sortSongs = (songs: SongWithChapter[]) => {
-    return [...songs].sort((a, b) => {
-      // 챕터 ID로 정렬
-      const chapterIdA = Number(a.chapterId);
-      const chapterIdB = Number(b.chapterId);
-      if (chapterIdA !== chapterIdB) {
-        return chapterIdA - chapterIdB;
-      }
-      // 장르 ID로 정렬
-      const genreIdA = Number(a.genreId);
-      const genreIdB = Number(b.genreId);
-      if (genreIdA !== genreIdB) {
-        return genreIdA - genreIdB;
-      }
-      // 제목으로 정렬
-      return a.title.localeCompare(b.title);
-    });
-  };
-
-  const sortedSongs = useMemo(() => sortSongs(songs), [songs]);
-
-  // 검색 폼 렌더링
-  const renderSearchForm = useCallback(() => {
-    return <SearchFormWrapper {...searchFormProps} />;
-  }, [searchFormProps]);
-
-  // 챕터별로 노래 그룹화
-  const songsByChapter = sortedSongs.reduce((acc, song) => {
-    const chapter = song.chapterId;
-    if (!chapter) return acc;
-    
-    const chapterName = `계시록 ${song.chapterId}장`;
-    if (!acc[chapterName]) {
-      acc[chapterName] = [];
-    }
-    acc[chapterName].push(song);
-    return acc;
-  }, {} as Record<string, SongWithChapter[]>);
-
   useEffect(() => {
     if (selectedChapter) {
       const mainContent = document.getElementById('main-content');
@@ -432,7 +436,7 @@ const SongGrid = ({ songs, onSongSelect, onPlayAllAction, isDarkMode, toast, gen
           </button>
         </div>
       
-        {renderSearchForm()}
+        {searchFormProps && <SearchFormWrapper {...searchFormProps} />}
 
         {/* 검색 결과 요약 */}
         <div className="mb-6">
@@ -693,7 +697,7 @@ const SongGrid = ({ songs, onSongSelect, onPlayAllAction, isDarkMode, toast, gen
       </div>
 
       <div className="px-4 py-6">
-        {renderSearchForm()}
+        {searchFormProps && <SearchFormWrapper {...searchFormProps} />}
 
         {/* 앱 설명 */}
         {isNoticeVisible && (
@@ -763,9 +767,12 @@ const SongGrid = ({ songs, onSongSelect, onPlayAllAction, isDarkMode, toast, gen
             각 장별 듣기
           </h2>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
-            {Object.entries(songsByChapter)
-              .slice(0, 4)
-              .map(([chapterName, chapterSongs]) => {
+            {Object.keys(songsByChapter).sort((a, b) => {
+                // 숫자만 추출하여 정수로 변환
+                const chapterA = parseInt(a.replace(/[^0-9]/g, ''));
+                const chapterB = parseInt(b.replace(/[^0-9]/g, ''));
+                return chapterA - chapterB;
+              }).map((chapterName) => {
                 return (
                   <div
                     key={chapterName}
@@ -775,26 +782,21 @@ const SongGrid = ({ songs, onSongSelect, onPlayAllAction, isDarkMode, toast, gen
                     {/* 챕터 앨범 커버 */}
                     <div className="aspect-square rounded-2xl overflow-hidden shadow-xl relative
                       transform transition-all duration-300 group-hover:scale-105 group-hover:shadow-2xl
-                      bg-gradient-to-br {getAlbumColor(Number(chapterSongs[0]?.chapterId))}
+                      bg-gradient-to-br {getAlbumColor(Number(songsByChapter[chapterName][0]?.chapterId))}
                     ">
                       {/* 챕터 이미지 */}
                       <CachedImage 
-                        src={`/images/chapters/${chapterSongs[0]?.chapterId}.jpg`}
-                        alt={`계시록 ${chapterSongs[0]?.chapterId}장`}
+                        src={`/images/chapters/${songsByChapter[chapterName][0]?.chapterId}.jpg`}
+                        alt={`계시록 ${songsByChapter[chapterName][0]?.chapterId}장`}
                         fill
                         className="object-cover"
                         sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 20vw"
-                        onError={(e) => {
-                          // 이미지 로드 실패 시 기본 그라데이션 배경만 보이도록
-                          e.currentTarget.style.display = 'none';
-                        }}
-                        priority
                       />
 
                       {/* 챕터 번호 */}
                       <div className="absolute inset-0 flex items-center justify-center">
                         <span className="text-white text-6xl font-bold opacity-30">
-                          {chapterSongs[0]?.chapterId}
+                          {songsByChapter[chapterName][0]?.chapterId}
                         </span>
                       </div>
 
@@ -811,51 +813,16 @@ const SongGrid = ({ songs, onSongSelect, onPlayAllAction, isDarkMode, toast, gen
                     {/* 챕터 정보 */}
                     <div className="mt-4">
                       <h3 className={`text-xl font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                        계시록 {chapterSongs[0]?.chapterId}장
+                        계시록 {songsByChapter[chapterName][0]?.chapterId}장
                       </h3>
                       <p className={`mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                        {chapterSongs.length}곡
+                        {songsByChapter[chapterName].length}곡
                       </p>
                     </div>
                   </div>
                 );
               })}
           </div>
-
-          {/* 더보기 버튼 */}
-          {Object.keys(songsByChapter).length > 4 && (
-            <div className="flex justify-center mt-8">
-              <motion.button
-                onClick={() => setSelectedChapter(Object.keys(songsByChapter)[4])}
-                className={`
-                  px-6 py-3 rounded-xl text-sm font-medium
-                  flex items-center gap-2
-                  ${isDarkMode 
-                    ? 'bg-gray-800 text-white hover:bg-gray-700' 
-                    : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
-                  }
-                  transition-all duration-300 shadow-lg hover:shadow-xl
-                `}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-              >
-                <span>더보기</span>
-                <svg 
-                  className="w-4 h-4" 
-                  fill="none" 
-                  stroke="currentColor" 
-                  viewBox="0 0 24 24"
-                >
-                  <path 
-                    strokeLinecap="round" 
-                    strokeLinejoin="round" 
-                    strokeWidth={2} 
-                    d="M19 9l-7 7-7-7"
-                  />
-                </svg>
-              </motion.button>
-            </div>
-          )}
         </div>
       </div>
     </div>

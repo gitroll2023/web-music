@@ -442,9 +442,46 @@ const LyricsTimestampEditor: React.FC<LyricsTimestampEditorProps> = ({
     setCurrentLine(currentLine + 1);
   };
 
+  const formatLyrics = (inputLyrics: string[]) => {
+    try {
+      // 전체 가사를 하나의 문자열로 합치기
+      const fullLyrics = inputLyrics.join(' ');
+      
+      // 타임스탬프와 가사 추출
+      const timestampRegex = /\[(\d{2}:\d{2}\.\d{2})\](.*?)(?=\[|$)/g;
+      const matches = Array.from(fullLyrics.matchAll(timestampRegex));
+      
+      // 새로운 가사 배열 생성
+      const formattedLyrics = matches
+        .map(match => {
+          const timestamp = match[1];
+          const text = match[2].trim();
+          return text ? `[${timestamp}]${text}` : null;
+        })
+        .filter((line): line is string => line !== null);
+
+      // 첫 줄에 빈 타임스탬프가 없을 경우에만 추가
+      if (!formattedLyrics.some(line => line === '[00:00.00]' || line === '[00:00.00] ')) {
+        formattedLyrics.unshift('[00:00.00]');
+      }
+
+      return formattedLyrics;
+    } catch (error) {
+      console.error('Error formatting lyrics:', error);
+      return inputLyrics;
+    }
+  };
+
+  const fixTimestampFormat = () => {
+    const fixedLyrics = formatLyrics(lyrics);
+    setLyrics(fixedLyrics);
+  };
+
   const handleSave = async () => {
     try {
-      const lyricsText = lyrics.join('\n');
+      // 저장하기 전에 가사 포맷팅
+      const formattedLyrics = formatLyrics(lyrics);
+      const lyricsText = formattedLyrics.join('\n');
       
       const response = await fetch(`/api/songs/${songId}/lyrics`, {
         method: 'PUT',
@@ -535,6 +572,19 @@ const LyricsTimestampEditor: React.FC<LyricsTimestampEditorProps> = ({
     setTimestamps(newTimestamps);
   };
 
+  const updateTimestamps = (newLyrics: string[]) => {
+    const newTimestamps: TimestampInfo[] = [];
+    newLyrics.forEach((line, index) => {
+      const match = line.match(/^\[(\d{2}):(\d{2})\.(\d{2})\]/);
+      if (match) {
+        const [, minutes, seconds, centiseconds] = match;
+        const time = parseInt(minutes) * 60 + parseInt(seconds) + parseInt(centiseconds) / 100;
+        newTimestamps.push({ time, index });
+      }
+    });
+    setTimestamps(newTimestamps);
+  };
+
   const renderTimeControls = () => (
     <div className="flex items-center space-x-2">
       <button
@@ -597,19 +647,6 @@ const LyricsTimestampEditor: React.FC<LyricsTimestampEditorProps> = ({
       console.error('Playback error:', error);
       setError('재생 중 오류가 발생했습니다.');
     }
-  };
-
-  const updateTimestamps = (newLyrics: string[]) => {
-    const newTimestamps: TimestampInfo[] = [];
-    newLyrics.forEach((line, index) => {
-      const match = line.match(/^\[(\d{2}):(\d{2})\.(\d{2})\]/);
-      if (match) {
-        const [, minutes, seconds, centiseconds] = match;
-        const time = parseInt(minutes) * 60 + parseInt(seconds) + parseInt(centiseconds) / 100;
-        newTimestamps.push({ time, index });
-      }
-    });
-    setTimestamps(newTimestamps);
   };
 
   const renderRepeatStatus = () => {
@@ -943,6 +980,12 @@ const LyricsTimestampEditor: React.FC<LyricsTimestampEditorProps> = ({
                 <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
               </svg>
               <span>타임스탬프 초기화</span>
+            </button>
+            <button
+              onClick={fixTimestampFormat}
+              className="px-4 py-2 bg-yellow-500 text-white rounded-lg shadow-lg hover:bg-yellow-600 transition-colors"
+            >
+              타임스탬프 오류 해결
             </button>
           </div>
           <div className="flex items-center space-x-2">

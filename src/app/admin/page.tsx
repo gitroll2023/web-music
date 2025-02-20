@@ -204,6 +204,7 @@ export default function AdminPage() {
       const response = await fetch(getApiUrl('/api/songs?limit=100')); 
       if (!response.ok) throw new Error('Failed to fetch songs');
       const data = await response.json();
+      console.log('API Response Data:', data);  // API 응답 데이터 로깅
       setSongs(data.songs); 
     } catch (error) {
       console.error('Error fetching songs:', error);
