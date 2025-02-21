@@ -1,11 +1,18 @@
 import { google } from 'googleapis';
 import { NextResponse } from 'next/server';
 import { getConfig, setConfig } from '@/utils/configManager';
+import { headers } from 'next/headers';
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const code = searchParams.get('code');
+
+    // 현재 요청의 URL 정보 로깅
+    const headersList = headers();
+    const host = headersList.get('host') || '';
+    console.log('Callback - Current host:', host);
+    console.log('Callback - Request URL:', request.url);
 
     if (!code) {
       return NextResponse.json({ error: 'Authorization code is missing' }, { status: 400 });
@@ -15,6 +22,8 @@ export async function GET(request: Request) {
     const clientId = await getConfig('GOOGLE_DRIVE_CLIENT_ID');
     const clientSecret = await getConfig('GOOGLE_DRIVE_CLIENT_SECRET');
     const redirectUri = 'https://biblemusic-gold.vercel.app/api/auth/callback/google';
+
+    console.log('Callback - Using redirect URI:', redirectUri);
 
     if (!clientId || !clientSecret) {
       return NextResponse.json({ error: 'OAuth2 configuration is missing' }, { status: 500 });
