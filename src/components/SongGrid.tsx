@@ -327,16 +327,12 @@ const SongGrid = ({ songs, onSongSelect, onPlayAllAction, isDarkMode, toast, gen
     onGenreSelect
   }), [tempSearchQuery, handleSearchChange, handleSearch, isSearchMode, setIsSearchMode, handleReset, selectedGenre, handleGenreChange, isDarkMode, genres, selectedGenres, onGenreSelect]);
 
-  // 디버깅을 위한 로그
-  console.log('Original Songs:', songs);
-
   // 노래 정렬 로직
   const sortSongs = (songs: SongWithChapter[]) => {
     const sorted = [...songs].sort((a, b) => {
       // 챕터 ID로 정렬 (숫자로 변환하여 비교)
       const chapterIdA = parseInt(String(a.chapterId));
       const chapterIdB = parseInt(String(b.chapterId));
-      console.log(`Comparing chapters: ${a.chapterId}(${chapterIdA}) vs ${b.chapterId}(${chapterIdB})`);
       if (chapterIdA !== chapterIdB) {
         return chapterIdA - chapterIdB;
       }
@@ -349,7 +345,6 @@ const SongGrid = ({ songs, onSongSelect, onPlayAllAction, isDarkMode, toast, gen
       // 제목으로 정렬
       return a.title.localeCompare(b.title);
     });
-    console.log('Sorted Songs:', sorted);
     return sorted;
   };
 
@@ -361,15 +356,12 @@ const SongGrid = ({ songs, onSongSelect, onPlayAllAction, isDarkMode, toast, gen
     if (!chapter) return acc;
     
     const chapterName = `계시록 ${song.chapterId}장`;
-    console.log(`Adding song to chapter: ${chapterName}`, song);
     if (!acc[chapterName]) {
       acc[chapterName] = [];
     }
     acc[chapterName].push(song);
     return acc;
   }, {} as Record<string, SongWithChapter[]>);
-
-  console.log('Songs by Chapter:', songsByChapter);
 
   // 필터링된 곡 목록
   const filteredSongs = useMemo(() => {
