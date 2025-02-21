@@ -7,9 +7,9 @@ export async function GET() {
     // configManager에서 설정 가져오기
     const clientId = await getConfig('GOOGLE_DRIVE_CLIENT_ID');
     const clientSecret = await getConfig('GOOGLE_DRIVE_CLIENT_SECRET');
-    const redirectUri = await getConfig('GOOGLE_DRIVE_REDIRECT_URI');
+    const redirectUri = 'https://biblemusic-gold.vercel.app/api/auth/callback/google';  // production URL 사용
 
-    if (!clientId || !clientSecret || !redirectUri) {
+    if (!clientId || !clientSecret) {
       return NextResponse.json({ error: 'OAuth2 configuration is missing' }, { status: 500 });
     }
 

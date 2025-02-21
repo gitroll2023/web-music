@@ -1661,14 +1661,7 @@ export default function AdminPage() {
           </div>
         )}
         
-        <div className="mb-6">
-          <button
-            onClick={handleGoogleAuth}
-            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-          >
-            구글 드라이브 인증
-          </button>
-        </div>
+        
       </div>
     </div>
   );

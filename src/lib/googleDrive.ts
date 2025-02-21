@@ -1,5 +1,5 @@
 import { google } from 'googleapis';
-import { getConfig } from '@/utils/configManager';
+import { getConfig, setConfig } from '@/utils/configManager';
 
 let oauth2Client: any = null;
 let drive: any = null;
@@ -8,15 +8,23 @@ async function initializeGoogleDrive() {
   if (!oauth2Client) {
     const clientId = await getConfig('GOOGLE_DRIVE_CLIENT_ID');
     const clientSecret = await getConfig('GOOGLE_DRIVE_CLIENT_SECRET');
-    const redirectUri = await getConfig('GOOGLE_DRIVE_REDIRECT_URI');
     const refreshToken = await getConfig('GOOGLE_DRIVE_REFRESH_TOKEN');
 
-    if (!clientId || !clientSecret || !redirectUri || !refreshToken) {
+    if (!clientId || !clientSecret || !refreshToken) {
       throw new Error('Missing Google Drive configuration');
     }
 
-    oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+    oauth2Client = new google.auth.OAuth2(clientId, clientSecret);
     oauth2Client.setCredentials({ refresh_token: refreshToken });
+
+    // 토큰 갱신 이벤트 리스너 추가
+    oauth2Client.on('tokens', async (tokens: any) => {
+      if (tokens.refresh_token) {
+        // 새로운 refresh token이 발급되면 저장
+        await setConfig('GOOGLE_DRIVE_REFRESH_TOKEN', tokens.refresh_token);
+      }
+    });
+
     drive = google.drive({ version: 'v3', auth: oauth2Client });
   }
   return drive;
@@ -53,7 +61,7 @@ export async function getGoogleDriveDirectLink(fileId: string): Promise<string |
   } catch (error) {
     console.error('Error getting Google Drive direct link:', error);
     
-    // 토큰 만료 에러인 경우 클라이언트 초기화
+    // 토큰 만료 에러인 경우 클라이언트 초기화 후 재시도
     if (error instanceof Error && 
         (error.message.includes('invalid_grant') || error.message.includes('token expired'))) {
       oauth2Client = null;
@@ -62,5 +70,23 @@ export async function getGoogleDriveDirectLink(fileId: string): Promise<string |
     }
     
     return null;
+  }
+}
+
+// 토큰 갱신 함수
+export async function refreshGoogleToken(): Promise<boolean> {
+  try {
+    if (!oauth2Client) {
+      await initializeGoogleDrive();
+    }
+
+    // 토큰 갱신 요청
+    const { credentials } = await oauth2Client.refreshAccessToken();
+    oauth2Client.setCredentials(credentials);
+
+    return true;
+  } catch (error) {
+    console.error('Error refreshing token:', error);
+    return false;
   }
 }
