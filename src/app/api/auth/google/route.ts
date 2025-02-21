@@ -1,22 +1,13 @@
 import { google } from 'googleapis';
 import { NextResponse } from 'next/server';
 import { getConfig } from '@/utils/configManager';
-import { headers } from 'next/headers';
 
 export async function GET() {
   try {
-    // 호스트 이름 가져오기
-    const headersList = headers();
-    const host = headersList.get('host') || '';
-    const protocol = process.env.NODE_ENV === 'development' ? 'http' : 'https';
-    
-    // 환경에 따라 리디렉션 URI 설정
-    const redirectUri = `${protocol}://${host}/api/auth/callback/google`;
-    console.log('Using redirect URI:', redirectUri);  // 디버깅용
-
     // configManager에서 설정 가져오기
     const clientId = await getConfig('GOOGLE_DRIVE_CLIENT_ID');
     const clientSecret = await getConfig('GOOGLE_DRIVE_CLIENT_SECRET');
+    const redirectUri = 'https://biblemusic-gold.vercel.app/api/auth/callback/google';
 
     if (!clientId || !clientSecret) {
       return NextResponse.json({ error: 'OAuth2 configuration is missing' }, { status: 500 });
