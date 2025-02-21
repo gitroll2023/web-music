@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -12,10 +9,10 @@ datasource db {
 
 model Chapter {
   id        Int      @id @default(autoincrement())
-  name      String   @unique // 예: "계시록"
-  songs     Song[]
+  name      String   @unique
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
+  songs     Song[]
 
   @@map("chapters")
 }
@@ -23,46 +20,45 @@ model Chapter {
 model Genre {
   id        String   @id @default(uuid())
   name      String   @unique
-  songs     Song[]
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
+  songs     Song[]
 
   @@map("genres")
 }
 
 model Song {
-  id          Int      @id @default(autoincrement())
-  title       String   // 노래 제목
-  fileName    String   // 파일명 (예: 1-1, 1-2)
+  id          Int          @id @default(autoincrement())
+  chapterId   Int          @map("chapter_id")
+  title       String
   artist      String?
   driveFileId String?      @map("drive_file_id")
-  fileUrl     String?      @map("stream_url")
   duration    String?
   imageId     String?      @map("image_id")
   imageUrl    String?      @map("image_url")
-  lyrics      String?      @db.Text
-  chapter     Chapter      @relation(fields: [chapterId], references: [id])
-  chapterId   Int         @map("chapter_id")
-  genre       Genre        @relation(fields: [genreId], references: [id])
-  genreId     String      @map("genre_id")
+  lyrics      String?
   isNew       Boolean      @default(false) @map("is_new")
+  genreId     String       @map("genre_id")
   createdAt   DateTime     @default(now()) @map("created_at")
   updatedAt   DateTime     @updatedAt @map("updated_at")
+  fileUrl     String?      @map("stream_url")
+  fileName    String
   popularSong PopularSong?
+  chapter     Chapter      @relation(fields: [chapterId], references: [id])
+  genre       Genre        @relation(fields: [genreId], references: [id])
 
   @@map("songs")
 }
 
 model PopularSong {
   id        Int      @id @default(autoincrement())
-  song      Song     @relation(fields: [songId], references: [id])
-  songId    Int      @map("song_id")
+  songId    Int      @unique @map("song_id")
   order     Int
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
+  song      Song     @relation(fields: [songId], references: [id])
 
   @@map("popular_songs")
-  @@unique([songId], name: "popular_song_songid_unique")
 }
 
 model AppConfig {

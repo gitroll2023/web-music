@@ -915,6 +915,21 @@ export default function AdminPage() {
     );
   };
 
+  const handleGoogleAuth = async () => {
+    try {
+      const response = await fetch('/api/auth/google');
+      const data = await response.json();
+      
+      if (data.authUrl) {
+        // 새 창에서 인증 URL 열기
+        window.open(data.authUrl, 'googleAuth', 'width=600,height=800');
+      }
+    } catch (error) {
+      console.error('Error starting Google auth:', error);
+      alert('구글 인증을 시작하는데 실패했습니다.');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* 헤더 */}
@@ -1645,6 +1660,15 @@ export default function AdminPage() {
             </div>
           </div>
         )}
+        
+        <div className="mb-6">
+          <button
+            onClick={handleGoogleAuth}
+            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+          >
+            구글 드라이브 인증
+          </button>
+        </div>
       </div>
     </div>
   );
