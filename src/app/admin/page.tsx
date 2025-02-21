@@ -7,6 +7,7 @@ import { FiEdit2, FiTrash2, FiStar, FiClock, FiList, FiPlusCircle, FiCopy } from
 import { toast } from 'react-hot-toast';
 import LyricsTimestampEditorV2 from '@/components/LyricsTimestampEditorV2';
 import { getApiUrl } from '@/utils/config';
+import crypto from 'crypto';
 
 interface SongWithChapter extends Song {
   chapter: PrismaChapter | null;
@@ -116,6 +117,60 @@ const getGenreColor = (genreId: string) => {
   return `${palette.bg} ${palette.text}`;
 };
 
+// 클라이언트 사이드에서 비밀번호 해시 생성 (대소문자 구분 없이)
+const hashPassword = (pwd: string) => {
+  return crypto.createHash('sha256').update(pwd.toLowerCase()).digest('hex');
+};
+
+// 세션 타이머 컴포넌트
+function SessionTimer({ onExtend }: { onExtend: () => void }) {
+  const [timeLeft, setTimeLeft] = useState('');
+  const [showExtendButton, setShowExtendButton] = useState(false);
+
+  useEffect(() => {
+    const updateTimer = () => {
+      const expiry = localStorage.getItem('adminAuthExpiry');
+      if (!expiry) return;
+
+      const timeLeftMs = parseInt(expiry) - new Date().getTime();
+      if (timeLeftMs <= 0) {
+        window.location.reload();
+        return;
+      }
+
+      const minutes = Math.floor(timeLeftMs / (60 * 1000));
+      const seconds = Math.floor((timeLeftMs % (60 * 1000)) / 1000);
+      setTimeLeft(`${minutes}:${seconds.toString().padStart(2, '0')}`);
+      
+      // 10분 이하로 남으면 연장 버튼 표시
+      setShowExtendButton(timeLeftMs < 10 * 60 * 1000);
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="fixed bottom-4 right-4 bg-white dark:bg-gray-800 p-4 rounded-lg shadow-lg z-50 flex items-center gap-4 md:bottom-8 md:right-8">
+      <div className="text-sm text-gray-900 dark:text-gray-100">
+        <span className="font-medium">세션 남은 시간:</span>{' '}
+        <span className={showExtendButton ? 'text-red-500' : 'text-gray-900 dark:text-gray-100'}>
+          {timeLeft}
+        </span>
+      </div>
+      {showExtendButton && (
+        <button
+          onClick={onExtend}
+          className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+        >
+          1시간 연장
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const router = useRouter();
   const [songs, setSongs] = useState<SongWithChapter[]>([]);
@@ -138,6 +193,9 @@ export default function AdminPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
 
   type TabButtonProps = {
     active: boolean;
@@ -243,25 +301,36 @@ export default function AdminPage() {
   const onFileUpload = async (file: File, type: 'audio' | 'image' | 'lyrics') => {
     if (!file) return null;
 
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('type', type);
-    formData.append('chapterId', formDataState.chapterId.toString());
-
-    // 수정 모드에서 이미지 파일 업로드 시 기존 파일명 전달
-    if (modalMode === 'edit' && type === 'image' && selectedSong?.fileName) {
-      formData.append('fileName', selectedSong.fileName);
-    }
-
     try {
-      const response = await fetch(getApiUrl('/api/upload'), {
+      // 리프레시 토큰으로 새 액세스 토큰 얻기
+      const tokenResponse = await fetch('/api/auth/token', {
+        method: 'POST'
+      });
+      
+      if (!tokenResponse.ok) {
+        throw new Error('Failed to get access token');
+      }
+
+      const { access_token } = await tokenResponse.json();
+
+      // 파일 업로드
+      const uploadForm = new FormData();
+      uploadForm.append('metadata', new Blob([JSON.stringify({
+        name: `${formDataState.title}_${type}.${file.name.split('.').pop()}`,
+        mimeType: file.type
+      })], { type: 'application/json' }));
+      uploadForm.append('file', file);
+
+      const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
         method: 'POST',
-        body: formData
+        headers: {
+          'Authorization': `Bearer ${access_token}`,
+        },
+        body: uploadForm
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || `Failed to upload ${type} file`);
+        throw new Error('Failed to upload file');
       }
 
       return await response.json();
@@ -344,16 +413,16 @@ export default function AdminPage() {
       formData.append('isNew', formDataState.isNew.toString());
 
       if (audioUploadResult) {
-        formData.append('driveFileId', audioUploadResult.fileId);
-        formData.append('fileUrl', audioUploadResult.fileUrl);
+        formData.append('driveFileId', audioUploadResult.id);
+        formData.append('fileUrl', audioUploadResult.webViewLink);
         const minutes = Math.floor(audioDuration / 60);
         const seconds = Math.floor(audioDuration % 60);
         formData.append('duration', `${minutes}:${seconds.toString().padStart(2, '0')}`);
       }
 
       if (imageUploadResult) {
-        formData.append('imageId', imageUploadResult.fileId);
-        formData.append('imageUrl', imageUploadResult.fileUrl);
+        formData.append('imageId', imageUploadResult.id);
+        formData.append('imageUrl', imageUploadResult.webViewLink);
       }
       
       const response = await fetch(getApiUrl('/api/songs'), {
@@ -406,8 +475,8 @@ export default function AdminPage() {
           const imageUploadResult = await onFileUpload(formDataState.imageFile, 'image');
           if (!imageUploadResult) return;
 
-          newImageId = imageUploadResult.fileId;
-          newImageUrl = imageUploadResult.fileUrl;
+          newImageId = imageUploadResult.id;
+          newImageUrl = imageUploadResult.webViewLink;
 
           // 기존 이미지 삭제
           if (selectedSong.imageId) {
@@ -431,8 +500,8 @@ export default function AdminPage() {
           const audioUploadResult = await onFileUpload(formDataState.audioFile, 'audio');
           if (!audioUploadResult) return;
 
-          newAudioFileId = audioUploadResult.fileId;
-          newAudioFileUrl = audioUploadResult.fileUrl;
+          newAudioFileId = audioUploadResult.id;
+          newAudioFileUrl = audioUploadResult.webViewLink;
 
           // 기존 오디오 파일 삭제
           if (selectedSong.driveFileId) {
@@ -506,12 +575,22 @@ export default function AdminPage() {
   // 파일 삭제 함수
   const deleteFile = async (fileId: string) => {
     try {
-      const response = await fetch(getApiUrl('/api/drive/delete'), {
-        method: 'POST',
+      // 리프레시 토큰으로 새 액세스 토큰 얻기
+      const tokenResponse = await fetch('/api/auth/token', {
+        method: 'POST'
+      });
+      
+      if (!tokenResponse.ok) {
+        throw new Error('Failed to get access token');
+      }
+
+      const { access_token } = await tokenResponse.json();
+
+      const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
+        method: 'DELETE',
         headers: {
-          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${access_token}`,
         },
-        body: JSON.stringify({ fileId }),
       });
 
       if (!response.ok) {
@@ -930,8 +1009,75 @@ export default function AdminPage() {
     }
   };
 
+  const handlePasswordSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // wjsoft의 해시값, 소문자로 변환
+    const correctHash = '23d5718f5e0f91a2843a4cbce0e62795c3f1d47ae260290131715c672995fe86';
+    
+    // 입력된 비밀번호 해시
+    const hashedPassword = hashPassword(password);
+
+    if (hashedPassword === correctHash) {
+      // 1시간 후 만료
+      const expiryTime = new Date().getTime() + (60 * 60 * 1000);
+      localStorage.setItem('adminAuthExpiry', expiryTime.toString());
+      setIsAuthenticated(true);
+      setError('');
+    } else {
+      setError('비밀번호가 올바르지 않습니다.');
+    }
+  };
+
+  const handleExtendSession = () => {
+    const newExpiryTime = new Date().getTime() + (60 * 60 * 1000);
+    localStorage.setItem('adminAuthExpiry', newExpiryTime.toString());
+    toast.success('세션이 1시간 연장되었습니다.');
+  };
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
+        <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-lg shadow-md">
+          <h2 className="text-center text-3xl font-extrabold text-gray-900">
+            관리자 로그인
+          </h2>
+          <form className="mt-8 space-y-6" onSubmit={handlePasswordSubmit}>
+            <div>
+              <label htmlFor="password" className="sr-only">
+                비밀번호
+              </label>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                required
+                className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                placeholder="비밀번호를 입력하세요"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+            {error && (
+              <p className="text-red-500 text-sm">{error}</p>
+            )}
+            <div>
+              <button
+                type="submit"
+                className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              >
+                로그인
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <SessionTimer onExtend={handleExtendSession} />
       {/* 헤더 */}
       <div className="bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500">
         <div className="container mx-auto px-6 py-8">
@@ -1264,7 +1410,12 @@ export default function AdminPage() {
               {lyricsCards.map((card) => (
                 <div key={card.id} className="bg-white rounded-lg shadow-md p-4 mb-4">
                   <div className="flex justify-between items-start mb-2">
-                    <div className="text-sm text-gray-500">{card.timestamp}</div>
+                    <div className="text-sm">
+                      <span className="font-medium">타임스탬프:</span>{' '}
+                      <span>
+                        {card.timestamp}
+                      </span>
+                    </div>
                     <div className="flex gap-2">
                       <button
                         onClick={() => copyToClipboard(card.lyrics)}
@@ -1449,7 +1600,8 @@ export default function AdminPage() {
                       type="button"
                       onClick={() => {
                         setShowModal(false);
-                        setFormDataState(initialFormData);
+                        setIsEditing(false);
+                        setSelectedSong(null);
                       }}
                       className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
                     >
