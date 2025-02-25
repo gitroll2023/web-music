@@ -246,21 +246,22 @@ export default function Home() {
         }
       } else {
         const currentIndex = playlist.findIndex(s => s.id === currentSong?.id);
-        const hasNextSong = currentIndex < playlist.length - 1;
         
-        if (hasNextSong || (repeatMode === 'all' && playlist.length > 0)) {
-          // 다음 곡으로 넘어갈 때 lastPosition 초기화
-          setLastPosition(0);
-          localStorage.removeItem('lastPosition');
-          
-          // 다음 곡이 있거나 전체반복이면 다음 곡 재생
-          const nextIndex = hasNextSong ? currentIndex + 1 : 0;
-          setCurrentSong(playlist[nextIndex]);
-          setIsPlaying(true);  // 자동 재생 유지
-        } else {
-          // 다음 곡이 없고 전체반복도 아니면 정지
-          setIsPlaying(false);
+        // 다음 곡 인덱스 계산
+        let nextIndex = currentIndex + 1;
+        if (nextIndex >= playlist.length) {
+          if (repeatMode === 'all') {
+            nextIndex = 0;
+          } else {
+            setIsPlaying(false);
+            return;
+          }
         }
+
+        // lastPosition 초기화 및 다음 곡 재생
+        setLastPosition(0);
+        setCurrentSong(playlist[nextIndex]);
+        setIsPlaying(true);
       }
     };
     const handleError = (e: ErrorEvent) => {
@@ -531,14 +532,30 @@ export default function Home() {
     setPlaylist([]);
     localStorage.removeItem('playlist');
     
-    // 새로운 재생목록 설정
+    // 새로운 재생목록 설정 (fileName 기준으로 정렬)
     const songsWithChapter = songs.map(convertToSongWithChapter);
-    setPlaylist(songsWithChapter);
-    localStorage.setItem('playlist', JSON.stringify(songsWithChapter));
+    const sortedSongs = [...songsWithChapter].sort((a, b) => {
+      if (a.fileName && b.fileName) {
+        // fileName 형식: "1-1", "1-2" 등
+        const [chapterA, numberA] = a.fileName.split('-').map(Number);
+        const [chapterB, numberB] = b.fileName.split('-').map(Number);
+        
+        // 장 번호로 먼저 비교
+        if (chapterA !== chapterB) {
+          return chapterA - chapterB;
+        }
+        // 같은 장이면 순번으로 비교
+        return numberA - numberB;
+      }
+      return 0;
+    });
+    
+    setPlaylist(sortedSongs);
+    localStorage.setItem('playlist', JSON.stringify(sortedSongs));
     
     // 첫 번째 곡부터 재생
-    if (songsWithChapter.length > 0) {
-      setCurrentSong(songsWithChapter[0]);
+    if (sortedSongs.length > 0) {
+      setCurrentSong(sortedSongs[0]);
       setIsPlaying(true);
     }
     

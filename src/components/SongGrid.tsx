@@ -330,20 +330,19 @@ const SongGrid = ({ songs, onSongSelect, onPlayAllAction, isDarkMode, toast, gen
   // 노래 정렬 로직
   const sortSongs = (songs: SongWithChapter[]) => {
     const sorted = [...songs].sort((a, b) => {
-      // 챕터 ID로 정렬 (숫자로 변환하여 비교)
-      const chapterIdA = parseInt(String(a.chapterId));
-      const chapterIdB = parseInt(String(b.chapterId));
-      if (chapterIdA !== chapterIdB) {
-        return chapterIdA - chapterIdB;
+      if (a.fileName && b.fileName) {
+        // fileName 형식: "1-1", "1-2" 등
+        const [chapterA, numberA] = a.fileName.split('-').map(Number);
+        const [chapterB, numberB] = b.fileName.split('-').map(Number);
+        
+        // 장 번호로 먼저 비교
+        if (chapterA !== chapterB) {
+          return chapterA - chapterB;
+        }
+        // 같은 장이면 순번으로 비교
+        return numberA - numberB;
       }
-      // 장르 ID로 정렬
-      const genreIdA = parseInt(String(a.genreId));
-      const genreIdB = parseInt(String(b.genreId));
-      if (genreIdA !== genreIdB) {
-        return genreIdA - genreIdB;
-      }
-      // 제목으로 정렬
-      return a.title.localeCompare(b.title);
+      return 0;
     });
     return sorted;
   };
@@ -550,7 +549,7 @@ const SongGrid = ({ songs, onSongSelect, onPlayAllAction, isDarkMode, toast, gen
           }`}
         >
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7-7-7z" />
           </svg>
           <span className="text-lg font-medium">뒤로 가기</span>
         </button>
