@@ -303,15 +303,13 @@ export default function AdminPage() {
 
     try {
       // 리프레시 토큰으로 새 액세스 토큰 얻기
-      const tokenResponse = await fetch('/api/auth/token', {
-        method: 'POST'
-      });
+      const tokenResponse = await fetch('/api/auth/get-access-token');
       
       if (!tokenResponse.ok) {
         throw new Error('Failed to get access token');
       }
 
-      const { access_token } = await tokenResponse.json();
+      const { accessToken } = await tokenResponse.json();
 
       // 파일 업로드
       const uploadForm = new FormData();
@@ -324,7 +322,7 @@ export default function AdminPage() {
       const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${access_token}`,
+          'Authorization': `Bearer ${accessToken}`,
         },
         body: uploadForm
       });
@@ -576,7 +574,7 @@ export default function AdminPage() {
   const deleteFile = async (fileId: string) => {
     try {
       // 리프레시 토큰으로 새 액세스 토큰 얻기
-      const tokenResponse = await fetch('/api/auth/token', {
+      const tokenResponse = await fetch('/api/auth/get-access-token', {
         method: 'POST'
       });
       
@@ -584,12 +582,12 @@ export default function AdminPage() {
         throw new Error('Failed to get access token');
       }
 
-      const { access_token } = await tokenResponse.json();
+      const { accessToken } = await tokenResponse.json();
 
       const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${access_token}`,
+          'Authorization': `Bearer ${accessToken}`,
         },
       });
 

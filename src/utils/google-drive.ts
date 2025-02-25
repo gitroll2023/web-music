@@ -103,69 +103,44 @@ export async function deleteFile(fileId: string) {
 
 // export const drive = google.drive({ version: 'v3', auth: oauth2Client });
 
-export const uploadFileToDrive = async (file: File, fileName: string, folderId?: string) => {
+export async function uploadFileToDrive(file: File, fileName: string, folderId?: string) {
   try {
-    // Access token 얻기
-    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({
-        client_id: process.env.NEXT_PUBLIC_GOOGLE_DRIVE_CLIENT_ID!,
-        client_secret: process.env.NEXT_PUBLIC_GOOGLE_DRIVE_CLIENT_SECRET!,
-        refresh_token: process.env.NEXT_PUBLIC_GOOGLE_DRIVE_REFRESH_TOKEN!,
-        grant_type: 'refresh_token',
-      }),
-    });
+    // 먼저 액세스 토큰 가져오기
+    const tokenResponse = await fetch('/api/auth/get-access-token');
+    if (!tokenResponse.ok) {
+      throw new Error('Failed to get access token');
+    }
+    const { accessToken } = await tokenResponse.json();
 
-    const { access_token } = await tokenResponse.json();
+    // FormData 생성
+    const formData = new FormData();
+    formData.append('file', file);
 
-    // 파일 메타데이터
+    // 메타데이터 설정
     const metadata = {
       name: fileName,
-      ...(folderId ? { parents: [folderId] } : {}),
+      parents: folderId ? [folderId] : undefined
     };
 
-    // 멀티파트 요청 생성
-    const form = new FormData();
-    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-    form.append('file', file);
+    formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
 
-    // 파일 업로드
+    // Google Drive API로 파일 업로드
     const uploadResponse = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${access_token}`,
+        Authorization: `Bearer ${accessToken}`,
       },
-      body: form,
+      body: formData
     });
 
     if (!uploadResponse.ok) {
-      throw new Error('Failed to upload file');
+      throw new Error('Failed to upload file to Google Drive');
     }
 
-    const { id } = await uploadResponse.json();
-
-    // 파일 권한 설정
-    await fetch(`https://www.googleapis.com/drive/v3/files/${id}/permissions`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        role: 'reader',
-        type: 'anyone',
-      }),
-    });
-
-    return {
-      fileId: id,
-      fileUrl: `https://drive.google.com/uc?export=view&id=${id}`,
-    };
+    const data = await uploadResponse.json();
+    return data;
   } catch (error) {
     console.error('Error uploading file:', error);
     throw error;
   }
-};
+}
