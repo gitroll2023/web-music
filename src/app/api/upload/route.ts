@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import { Readable } from 'stream';
 import { prisma } from '@/lib/prisma';
+import { uploadFileToDrive } from '@/utils/google-drive';
 
 // OAuth2 클라이언트 설정
 const oauth2Client = new google.auth.OAuth2(
@@ -113,37 +114,37 @@ export async function POST(request: NextRequest) {
 
     // 파일 업로드 시작
     console.log('Starting Google Drive upload...');
-    const res = await drive.files.create({
-      requestBody: fileMetadata,
-      media: {
-        mimeType: file.type,
-        body: stream
-      },
-      fields: 'id',
-    });
+    const uploadResult = await uploadFileToDrive(file, fileName);
+    console.log('Upload result:', uploadResult);
 
-    console.log('Google Drive upload response:', res.data);
-
-    if (!res.data.id) {
+    if (!uploadResult.id) {
       throw new Error('Failed to upload file');
     }
 
-    // 파일 권한 설정 (공개)
+    // 파일 권한 설정 (링크를 가진 사람에게 공개)
     console.log('Setting file permissions...');
     await drive.permissions.create({
-      fileId: res.data.id,
+      fileId: uploadResult.id,
       requestBody: {
         role: 'reader',
-        type: 'anyone',
-      },
+        type: 'anyone'
+      }
+    });
+
+    // 파일을 공개로 설정
+    await drive.files.update({
+      fileId: uploadResult.id,
+      requestBody: {
+        shared: true
+      }
     });
 
     console.log('File upload completed successfully');
 
     return NextResponse.json({
       success: true,
-      fileId: res.data.id,
-      fileUrl: `https://drive.google.com/uc?export=view&id=${res.data.id}`,
+      fileId: uploadResult.id,
+      fileUrl: `https://drive.google.com/file/d/${uploadResult.id}/view?usp=sharing`,
       fileName: fileName
     });
 

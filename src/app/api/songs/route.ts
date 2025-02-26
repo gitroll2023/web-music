@@ -129,10 +129,20 @@ export async function POST(request: Request) {
     const lyrics = formData.get('lyrics') as string;
     const isNew = formData.get('isNew') === 'true';
     const driveFileId = formData.get('driveFileId') as string;
-    const fileUrl = formData.get('fileUrl') as string;
+    let fileUrl = formData.get('fileUrl') as string;
     const duration = formData.get('duration') as string;
     const imageId = formData.get('imageId') as string;
-    const imageUrl = formData.get('imageUrl') as string;
+    let imageUrl = formData.get('imageUrl') as string;
+
+    // URL이 없으면 생성
+    if (driveFileId && !fileUrl) {
+      fileUrl = `https://drive.google.com/uc?export=view&id=${driveFileId}`;
+      console.log('Generated audio URL:', fileUrl);
+    }
+    if (imageId && !imageUrl) {
+      imageUrl = `https://drive.google.com/uc?export=view&id=${imageId}`;
+      console.log('Generated image URL:', imageUrl);
+    }
 
     console.log('Extracted data:', {
       title,
@@ -340,21 +350,32 @@ export async function PUT(request: Request) {
           imageFile: imageFile
         });
 
+        // 기존 오디오 파일 삭제
+        if (existingSong.driveFileId) {
+          try {
+            await deleteFile(existingSong.driveFileId);
+            console.log('Old audio file deleted from Google Drive:', existingSong.driveFileId);
+          } catch (error) {
+            console.error('Error deleting old audio file:', error);
+          }
+        }
+
         // 오디오 파일을 버퍼로 변환
         console.log('Converting audio file to buffer...');
         const arrayBuffer = await audioFile.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
         console.log('Audio buffer size:', buffer.length);
 
-        // 구글 드라이브에 업로드
-        console.log('Uploading audio file to Google Drive...');
-        const uploadResult = await uploadFile(buffer, audioFile.name, 'audio/mpeg');
+        // 구글 드라이브에 업로드 (기존 파일명 사용)
+        const fileName = `${existingSong.fileName}.mp3`;
+        console.log('Uploading audio file to Google Drive with name:', fileName);
+        const uploadResult = await uploadFile(buffer, fileName, 'audio/mpeg');
         console.log('Upload result:', uploadResult);
-        driveFileId = uploadResult;  // uploadResult가 이미 ID인지 확인
+        driveFileId = uploadResult;
         console.log('Audio file uploaded successfully, driveFileId:', driveFileId);
 
         // 파일 URL 생성
-        fileUrl = driveFileId ? await getAudioUrl(driveFileId) : null;
+        fileUrl = driveFileId ? `https://drive.google.com/uc?export=view&id=${driveFileId}` : null;
         console.log('Generated audio URL:', fileUrl);
 
         // 오디오 길이 가져오기
@@ -383,6 +404,16 @@ export async function PUT(request: Request) {
           );
         }
 
+        // 기존 이미지 삭제
+        if (existingSong.imageId) {
+          try {
+            await deleteFile(existingSong.imageId);
+            console.log('Old image file deleted from Google Drive:', existingSong.imageId);
+          } catch (error) {
+            console.error('Error deleting old image file:', error);
+          }
+        }
+
         console.log('Converting image file to buffer...');
         const imageBuffer = Buffer.from(await imageFile.arrayBuffer());
         console.log('Image buffer size:', imageBuffer.length);
@@ -390,18 +421,18 @@ export async function PUT(request: Request) {
         // 파일 확장자 추출 및 정규화
         let ext = path.extname(imageFile.name).toLowerCase();
         if (!ext || !['.jpg', '.jpeg', '.png', '.gif'].includes(ext)) {
-          // MIME 타입에 따라 확장자 설정
           ext = imageFile.type === 'image/jpeg' ? '.jpg'
               : imageFile.type === 'image/png' ? '.png'
               : '.gif';
         }
         
-        const newFileName = `${existingSong.fileName}${ext}`;
+        // 기존 파일명 사용
+        const fileName = `${existingSong.fileName}${ext}`;
+        console.log('Uploading image file to Google Drive with name:', fileName);
         
-        console.log('Uploading image file to Google Drive...');
         const imageFileId = await uploadFile(
           imageBuffer,
-          newFileName,
+          fileName,
           imageFile.type
         );
         console.log('Image upload result:', imageFileId);
@@ -409,7 +440,7 @@ export async function PUT(request: Request) {
 
         // 이미지 URL 생성
         if (imageId) {
-          imageUrl = await getImageUrl(imageId);
+          imageUrl = `https://drive.google.com/uc?export=view&id=${imageId}`;
           console.log('Generated image URL:', imageUrl);
         }
       } catch (error) {
@@ -477,26 +508,21 @@ export async function PUT(request: Request) {
   }
 }
 
-export async function DELETE(req: Request) {
+export async function DELETE(request: Request) {
   try {
-    const { searchParams } = new URL(req.url);
-    const songId = searchParams.get('id');
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
 
-    if (!songId) {
+    if (!id) {
       return NextResponse.json(
         { error: 'Song ID is required' },
         { status: 400 }
       );
     }
 
-    // 곡 정보 조회 - 모든 필드를 가져옴
+    // 기존 곡 찾기
     const song = await prisma.song.findUnique({
-      where: { id: Number(songId) },
-      include: {
-        chapter: true,
-        genre: true,
-        popularSong: true
-      }
+      where: { id: parseInt(id) }
     });
 
     if (!song) {
@@ -506,43 +532,36 @@ export async function DELETE(req: Request) {
       );
     }
 
-    console.log('Found song to delete:', song);
-
-    // 구글 드라이브에서 오디오 파일 삭제
+    // 구글 드라이브에서 파일 삭제
     if (song.driveFileId) {
       try {
-        console.log('Deleting audio file:', song.driveFileId);
         await deleteFile(song.driveFileId);
-        console.log('Audio file deleted successfully');
+        console.log('Audio file deleted from Google Drive:', song.driveFileId);
       } catch (error) {
         console.error('Error deleting audio file:', error);
-        throw error; // 파일 삭제 실패시 중단
       }
     }
 
-    // 구글 드라이브에서 이미지 파일 삭제
+    // 구글 드라이브에서 이미지 삭제
     if (song.imageId) {
       try {
-        console.log('Deleting image file:', song.imageId);
         await deleteFile(song.imageId);
-        console.log('Image file deleted successfully');
+        console.log('Image file deleted from Google Drive:', song.imageId);
       } catch (error) {
         console.error('Error deleting image file:', error);
-        throw error; // 파일 삭제 실패시 중단
       }
     }
 
-    // 모든 파일이 성공적으로 삭제된 후에만 DB에서 삭제
+    // DB에서 곡 삭제
     await prisma.song.delete({
-      where: { id: Number(songId) }
+      where: { id: parseInt(id) }
     });
 
-    console.log('Song deleted from database');
-    return NextResponse.json({ message: 'Song and associated files deleted successfully' });
+    return NextResponse.json({ message: 'Song deleted successfully' });
   } catch (error) {
-    console.error('Error in delete operation:', error);
+    console.error('Error deleting song:', error);
     return NextResponse.json(
-      { error: 'Failed to delete song and associated files' },
+      { error: 'Failed to delete song' },
       { status: 500 }
     );
   }

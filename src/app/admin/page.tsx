@@ -34,6 +34,7 @@ interface FormData {
   fileUrl: string;
   imageId: string;
   imageUrl: string;
+  fileName: string;
 }
 
 interface Genre {
@@ -68,7 +69,8 @@ const initialFormData: FormData = {
   driveFileId: '',
   fileUrl: '',
   imageId: '',
-  imageUrl: ''
+  imageUrl: '',
+  fileName: ''
 };
 
 // 색상 팔레트
@@ -298,7 +300,7 @@ export default function AdminPage() {
   };
 
   // 파일 업로드 핸들러
-  const onFileUpload = async (file: File, type: 'audio' | 'image' | 'lyrics') => {
+  const onFileUpload = async (file: File, type: 'audio' | 'image' | 'lyrics', fileName?: string) => {
     if (!file) return null;
 
     try {
@@ -311,27 +313,44 @@ export default function AdminPage() {
 
       const { accessToken } = await tokenResponse.json();
 
+      // 파일 확장자 결정
+      const extension = type === 'audio' ? 'mp3' : 'jpg';
+
       // 파일 업로드
       const uploadForm = new FormData();
-      uploadForm.append('metadata', new Blob([JSON.stringify({
-        name: `${formDataState.title}_${type}.${file.name.split('.').pop()}`,
+      const metadata = {
+        name: fileName ? `${fileName}.${extension}` : `${formDataState.fileName}.${extension}`,  // 예: 2-5.mp3 또는 2-5.jpg
         mimeType: file.type
-      })], { type: 'application/json' }));
+      };
+      
+      uploadForm.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
       uploadForm.append('file', file);
 
+      // Google Drive API로 파일 업로드
       const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
+          // Content-Type 헤더를 제거하여 브라우저가 자동으로 설정하도록 함
         },
         body: uploadForm
       });
 
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Upload error response:', errorText);
         throw new Error('Failed to upload file');
       }
 
-      return await response.json();
+      const result = await response.json();
+      console.log('Upload result:', result);
+
+      // URL 생성
+      if (result.id) {
+        result.url = `https://drive.google.com/uc?export=view&id=${result.id}`;
+      }
+
+      return result;
     } catch (error) {
       console.error(`Error uploading ${type} file:`, error);
       toast.error(`${type} 파일 업로드에 실패했습니다.`);
@@ -367,9 +386,9 @@ export default function AdminPage() {
 
   // 곡 생성
   const handleCreate = async () => {
-    try {
-      setIsLoading(true); 
+    setIsLoading(true); 
 
+    try {
       if (!formDataState.chapterId || !formDataState.title || !formDataState.lyrics) {
         toast.error('필수 정보를 모두 입력해주세요.');
         return;
@@ -377,6 +396,16 @@ export default function AdminPage() {
 
       // 챕터 기반으로 아티스트 이름 설정
       const artistName = getArtistNameFromChapter(formDataState.chapterId);
+
+      // 먼저 파일명 생성 요청
+      const fileNameResponse = await fetch(`/api/songs/generate-filename?chapterId=${formDataState.chapterId}`);
+      if (!fileNameResponse.ok) {
+        throw new Error('Failed to generate file name');
+      }
+      const { fileName } = await fileNameResponse.json();
+      
+      // 생성된 파일명을 formDataState에 설정
+      setFormDataState(prev => ({ ...prev, fileName }));
 
       // 오디오 파일 업로드
       let audioUploadResult = null;
@@ -390,14 +419,14 @@ export default function AdminPage() {
           console.error('Error getting audio duration:', error);
         }
 
-        audioUploadResult = await onFileUpload(formDataState.audioFile, 'audio');
+        audioUploadResult = await onFileUpload(formDataState.audioFile, 'audio', fileName);
         if (!audioUploadResult) return;
       }
 
       // 이미지 파일 업로드
       let imageUploadResult = null;
       if (formDataState.imageFile) {
-        imageUploadResult = await onFileUpload(formDataState.imageFile, 'image');
+        imageUploadResult = await onFileUpload(formDataState.imageFile, 'image', fileName);
         if (!imageUploadResult) return;
       }
 
@@ -412,7 +441,9 @@ export default function AdminPage() {
 
       if (audioUploadResult) {
         formData.append('driveFileId', audioUploadResult.id);
-        formData.append('fileUrl', audioUploadResult.webViewLink);
+        formData.append('fileUrl', audioUploadResult.url || `https://drive.google.com/uc?export=view&id=${audioUploadResult.id}`);
+        console.log('Audio upload result:', audioUploadResult);
+        console.log('Audio URL being set:', audioUploadResult.url || `https://drive.google.com/uc?export=view&id=${audioUploadResult.id}`);
         const minutes = Math.floor(audioDuration / 60);
         const seconds = Math.floor(audioDuration % 60);
         formData.append('duration', `${minutes}:${seconds.toString().padStart(2, '0')}`);
@@ -420,18 +451,20 @@ export default function AdminPage() {
 
       if (imageUploadResult) {
         formData.append('imageId', imageUploadResult.id);
-        formData.append('imageUrl', imageUploadResult.webViewLink);
+        formData.append('imageUrl', imageUploadResult.url || `https://drive.google.com/uc?export=view&id=${imageUploadResult.id}`);
+        console.log('Image upload result:', imageUploadResult);
+        console.log('Image URL being set:', imageUploadResult.url || `https://drive.google.com/uc?export=view&id=${imageUploadResult.id}`);
       }
       
-      const response = await fetch(getApiUrl('/api/songs'), {
+      const createSongResponse = await fetch(getApiUrl('/api/songs'), {
         method: 'POST',
         body: formData,
       });
 
-      const responseText = await response.text();
+      const responseText = await createSongResponse.text();
       console.log('API Response text:', responseText);
 
-      if (!response.ok) {
+      if (!createSongResponse.ok) {
         let error;
         try {
           error = JSON.parse(responseText);
@@ -470,11 +503,11 @@ export default function AdminPage() {
       // 새 이미지가 선택된 경우
       if (formDataState.imageFile) {
         try {
-          const imageUploadResult = await onFileUpload(formDataState.imageFile, 'image');
+          const imageUploadResult = await onFileUpload(formDataState.imageFile, 'image', selectedSong.fileName);
           if (!imageUploadResult) return;
 
           newImageId = imageUploadResult.id;
-          newImageUrl = imageUploadResult.webViewLink;
+          newImageUrl = `https://drive.google.com/uc?export=view&id=${imageUploadResult.id}`;
 
           // 기존 이미지 삭제
           if (selectedSong.imageId) {
@@ -499,7 +532,7 @@ export default function AdminPage() {
           if (!audioUploadResult) return;
 
           newAudioFileId = audioUploadResult.id;
-          newAudioFileUrl = audioUploadResult.webViewLink;
+          newAudioFileUrl = `https://drive.google.com/uc?export=view&id=${audioUploadResult.id}`;
 
           // 기존 오디오 파일 삭제
           if (selectedSong.driveFileId) {
@@ -573,12 +606,12 @@ export default function AdminPage() {
   // 파일 삭제 함수
   const deleteFile = async (fileId: string) => {
     try {
-      // 리프레시 토큰으로 새 액세스 토큰 얻기
-      const tokenResponse = await fetch('/api/auth/get-access-token', {
-        method: 'POST'
-      });
+      // GET 메서드로 변경
+      const tokenResponse = await fetch('/api/auth/get-access-token');
       
       if (!tokenResponse.ok) {
+        const errorText = await tokenResponse.text();
+        console.error('Token error response:', errorText);
         throw new Error('Failed to get access token');
       }
 
@@ -592,6 +625,8 @@ export default function AdminPage() {
       });
 
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Delete error response:', errorText);
         throw new Error('Failed to delete file');
       }
 
@@ -662,7 +697,8 @@ export default function AdminPage() {
       driveFileId: song.driveFileId || '',
       fileUrl: song.fileUrl || '',
       imageId: song.imageId || '',
-      imageUrl: song.imageUrl || ''
+      imageUrl: song.imageUrl || '',
+      fileName: song.title
     };
     setFormDataState(newFormData);
   };
@@ -1050,7 +1086,7 @@ export default function AdminPage() {
                 name="password"
                 type="password"
                 required
-                className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
                 placeholder="비밀번호를 입력하세요"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -1062,7 +1098,7 @@ export default function AdminPage() {
             <div>
               <button
                 type="submit"
-                className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400"
               >
                 로그인
               </button>
@@ -1522,7 +1558,7 @@ export default function AdminPage() {
                       id="isNew"
                       checked={formDataState.isNew}
                       onChange={(e) => setFormDataState({ ...formDataState, isNew: e.target.checked })}
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      className="h-4 w-4 text-blue-600 focus:ring-2 focus:ring-blue-500 border-gray-300 rounded"
                     />
                     <label htmlFor="isNew" className="ml-2 block text-sm text-gray-900">
                       신규곡
@@ -1719,7 +1755,7 @@ export default function AdminPage() {
                   <div className="text-center py-12">
                     <div className="text-gray-400">
                       <svg className="mx-auto h-12 w-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M9 19V6l12-3" />
                       </svg>
                     </div>
                     <h3 className="mt-2 text-sm font-medium text-gray-900">등록된 인기곡이 없습니다</h3>

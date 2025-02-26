@@ -110,7 +110,7 @@ export async function uploadFileToDrive(file: File, fileName: string, folderId?:
     if (!tokenResponse.ok) {
       throw new Error('Failed to get access token');
     }
-    const { accessToken } = await tokenResponse.json();
+    const { access_token } = await tokenResponse.json();
 
     // FormData 생성
     const formData = new FormData();
@@ -128,7 +128,7 @@ export async function uploadFileToDrive(file: File, fileName: string, folderId?:
     const uploadResponse = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: `Bearer ${access_token}`,
       },
       body: formData
     });
