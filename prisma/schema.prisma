@@ -1,0 +1,72 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Chapter {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  songs     Song[]
+
+  @@map("chapters")
+}
+
+model Genre {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  songs     Song[]
+
+  @@map("genres")
+}
+
+model Song {
+  id                    Int          @id @default(autoincrement())
+  chapterId             Int          @map("chapter_id")
+  title                 String
+  artist                String?
+  duration              String?
+  lyrics                String?
+  isNew                 Boolean      @default(false) @map("is_new")
+  genreId               String       @map("genre_id")
+  createdAt             DateTime     @default(now()) @map("created_at")
+  updatedAt             DateTime     @updatedAt @map("updated_at")
+  fileName              String
+  isRevelationChapter   Boolean      @default(false) @map("is_revelation_chapter")
+  isRevelationKeyVerse  Boolean      @default(false) @map("is_revelation_key_verse")
+  isRevelationTitle     Boolean      @default(false) @map("is_revelation_title")
+  popularSong           PopularSong?
+  chapter               Chapter      @relation(fields: [chapterId], references: [id])
+  genre                 Genre        @relation(fields: [genreId], references: [id])
+  driveFileId           String?      @map("drive_file_id")
+  imageId               String?      @map("image_id")
+  imageUrl              String?      @map("image_url")
+  fileUrl               String?      @map("stream_url")
+
+  @@map("songs")
+}
+
+model PopularSong {
+  id        Int      @id @default(autoincrement())
+  songId    Int      @unique @map("song_id")
+  order     Int
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  song      Song     @relation(fields: [songId], references: [id])
+
+  @@map("popular_songs")
+}
+
+model AppConfig {
+  key   String @id
+  value String
+
+  @@map("app_config")
+}

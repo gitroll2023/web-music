@@ -1,0 +1,173 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: 'Product Sans';
+  src: url('/fonts/ProductSans-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Product Sans Medium';
+  src: url('/fonts/ProductSans-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Product Sans';
+  src: url('/fonts/ProductSans-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* 다크 모드 (기본) */
+  --background: #121212;
+  --foreground: #ffffff;
+  --surface: rgba(255, 255, 255, 0.05);
+  --surface-light: rgba(255, 255, 255, 0.1);
+  --primary: #00cd3c;
+  --primary-dark: #00b334;
+  --text-secondary: rgba(255, 255, 255, 0.7);
+  --border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* 라이트 모드 */
+:root[class~="light"] {
+  --background: #ffffff;
+  --foreground: #111827;
+  --surface: rgba(0, 0, 0, 0.05);
+  --surface-light: rgba(0, 0, 0, 0.1);
+  --text-secondary: rgba(0, 0, 0, 0.6);
+  --border-color: rgba(0, 0, 0, 0.1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  color: var(--foreground);
+  background: #000000;
+  min-height: 100vh;
+  font-family: 'Product Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  letter-spacing: -0.3px;
+}
+
+/* 스크롤바 스타일링 */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--surface);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--surface-light);
+  border-radius: 4px;
+}
+
+/* 스크롤바 숨기기 */
+.scrollbar-hide::-webkit-scrollbar,
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide,
+.hide-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+/* 재생바 스타일링 */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;  /* 표준 속성 추가 */
+  background: transparent;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  background: var(--surface-light);
+  height: 4px;
+  border-radius: 2px;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;  /* 표준 속성 추가 */
+  height: 12px;
+  width: 12px;
+  border-radius: 50%;
+  background: var(--primary);
+  margin-top: -4px;
+}
+
+input[type="range"]:hover::-webkit-slider-thumb {
+  display: block;
+}
+
+/* YouTube Music 그라데이션 배경 */
+.youtube-music-gradient {
+  background: linear-gradient(180deg, #121212 0%, #000000 100%);
+}
+
+/* 멜론스타일 그라데이션 배경 */
+.melon-gradient {
+  background: linear-gradient(180deg, #222222 0%, #191919 100%);
+}
+
+/* 컴포넌트 배경 그라데이션 */
+.bg-surface {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.05) 100%);
+  backdrop-filter: blur(20px);
+}
+
+.bg-surface:hover {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.08) 100%);
+}
+
+/* Player 컴포넌트 배경 */
+.player-gradient {
+  background: linear-gradient(180deg, rgba(18, 18, 18, 0.95) 0%, rgba(18, 18, 18, 0.98) 100%);
+  backdrop-filter: blur(20px);
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;  /* Chrome, Safari and Opera */
+  }
+}
+
+/* 카드 스타일 */
+.card-shadow {
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s ease;
+}
+
+.card-shadow:hover {
+  box-shadow: 0 7px 14px rgba(0, 0, 0, 0.15), 0 3px 6px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
