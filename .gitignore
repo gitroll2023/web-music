@@ -51,8 +51,6 @@ docs/musicapp-*.json
 *.json.key
 credentials.json
 
-# Music files (too large for git)
-public/music/
 
 # IDE / tool artifacts
 .claude/
